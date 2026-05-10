@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #1F2675;
+  background: #f6f8ff;
+}
+
+/* Custom scrollbar to match brand */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #1F40C2, #7060A8);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Reusable classes */
+@layer components {
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-xl border border-white/60 shadow-soft rounded-3xl;
+  }
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-signara-text;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full
+           text-white font-semibold tracking-wide
+           bg-signara-text hover:opacity-95 active:opacity-90
+           shadow-soft hover:shadow-glow transition-all duration-300
+           focus:outline-none focus:ring-4 focus:ring-signara-purple/30;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full
+           font-semibold text-signara-navy bg-white/80 border border-signara-lilac/60
+           hover:bg-white shadow-sm hover:shadow-soft transition-all duration-300
+           focus:outline-none focus:ring-4 focus:ring-signara-purple/20;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full
+           bg-white/80 border border-signara-lilac/60 text-signara-navy
+           text-sm font-semibold shadow-sm;
+  }
+  .chip-active {
+    @apply bg-signara-text text-white border-transparent shadow-glow;
+  }
+}
