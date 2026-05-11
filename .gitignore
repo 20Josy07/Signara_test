@@ -20,4 +20,9 @@ __pycache__/
 .idea
 
 *.log
-.vercel
+
+# IA Signara
+sign_ai/venv/
+sign_ai/__pycache__/
+sign_ai/models/*.pkl
+sign_ai/data/*.csv
