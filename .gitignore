@@ -1,28 +1,47 @@
-node_modules
-dist
-dist-ssr
-*.local
-
+# =========================
+# DEPENDENCIAS / ENTORNO
+# =========================
 venv/
+.env
+.env.local
+
+# =========================
+# PYTHON CACHE
+# =========================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-.env
-.env.local
+# =========================
+# MODELOS Y DATOS IA
+# =========================
+datasets/
+models/
+*.pkl
+*.csv
 
+# =========================
+# SISTEMA / OS
+# =========================
 .DS_Store
 
-.vscode/*
+# =========================
+# IDEs
+# =========================
+.vscode/
 !.vscode/extensions.json
+.idea/
 
-.idea
-
+# =========================
+# LOGS
+# =========================
 *.log
 
-# IA Signara
-sign_ai/venv/
-sign_ai/__pycache__/
-sign_ai/models/*.pkl
-sign_ai/data/*.csv
+# =========================
+# FRONTEND (si usas Node en otro módulo)
+# =========================
+node_modules/
+dist/
+dist-ssr/
+*.local

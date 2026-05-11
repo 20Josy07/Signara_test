@@ -1,92 +1,161 @@
-# Signara
+*Signara*
 
-> Conectando dos mundos que hoy no logran comunicarse.
+Conectando dos mundos que hoy no logran comunicarse.
 
-Signara es una web app que traduce **texto** o **voz en español** a **lengua de señas**, reproduciendo las señas con un avatar animado.
+Signara es una web app que traduce texto o voz en español a lengua de señas, reproduciendo las señas con un avatar animado.
 
-Este repo es el **MVP de hackathon**: frontend completamente funcional, con la integración a Claude API ya preparada pero **mockeada** con datos locales para la demo.
+Este repo es el MVP de hackathon: frontend completamente funcional, con integración a IA en progreso (Claude + modelo propio con MediaPipe), actualmente en fase de dataset y entrenamiento.
 
----
+Módulo IA (nuevo)
 
-## Stack
+Este proyecto también incluye un backend de IA para reconocimiento de señas:
 
-- React 18 + Vite
-- Tailwind CSS 3
-- Web Speech API (voz)
+Captura de mano con MediaPipe
+Entrenamiento de modelo con datasets propios
+Predicción en tiempo real de letras/palabras
+API lista para conectar con frontend (FastAPI)
 
-## Estructura
+Requisitos del sistema
+IMPORTANTE
 
-```
+Usar:
+
+Python 3.11 (OBLIGATORIO)
+
+❌ NO usar Python 3.12 o superior (incompatible con MediaPipe en algunos casos)
+
+Descargar aquí:
+https://www.python.org/downloads/release/python-3119/
+
+
+Instalación completa (frontend + IA)
+1. Clonar o actualizar repo:
+git pull origin main
+
+Si hay cambios locales y quieren limpiar todo:
+
+git reset --hard origin/main
+git clean -fd
+
+2. Crear entorno virtual (IA)
+
+py -3.11 -m venv venv
+
+3. Activar entorno
+
+venv\Scripts\activate
+
+4. Instalar dependencias (IA)
+
+pip install -r requirements.txt
+
+5. Instalar frontend
+
+npm install
+
+
+
+Ejecución del proyecto
+Frontend:
+
+npm run dev
+
+http://localhost:5173
+
+IA (captura de datos)
+
+python 01_collect.py
+
+IA (API futura) //aun no
+uvicorn api:app --reload
+
+
+Estructura 
 Signara/
 ├── public/
 │   ├── logo.svg
-│   └── videos/            # placeholders — drop real sign clips here
+│   └── videos/
+├── src/ (Frontend React)
+│
+├── sign_ai/ (Backend IA)
+│   ├── 01_collect.py      # captura de datos
+│   ├── 02_train.py        # entrenamiento
+│   ├── 03_realtime.py     # predicción en vivo
+│   ├── core/
+│   ├── datasets/
+│   ├── api.py             # FastAPI (en desarrollo)
+│   └── requirements.txt
+│
+├── package.json
+└── README.md
+
+
+Flujo del sistema
+Cámara → MediaPipe → Landmarks → Modelo IA → Letra/Seña → Frontend React
+
+Stack
+Frontend
+React 18 + Vite
+Tailwind CSS 3
+Web Speech API
+IA
+Python 3.11
+MediaPipe
+OpenCV
+Scikit-learn / TensorFlow (según modelo)
+FastAPI (backend)
+
+Estructura Frontend (original)
+
+(se mantiene igual que tu versión actual)
+
+Signara/
+├── public/
+│   ├── logo.svg
+│   └── videos/
 ├── src/
-│   ├── App.jsx            # router de pantallas
+│   ├── App.jsx
 │   ├── main.jsx
 │   ├── index.css
 │   ├── components/
-│   │   ├── Logo.jsx
-│   │   ├── LandingScreen.jsx
-│   │   ├── ModeSelection.jsx
-│   │   ├── TranslationScreen.jsx
-│   │   ├── TextInputPanel.jsx
-│   │   ├── AvatarPlayer.jsx
-│   │   └── SignChips.jsx
 │   ├── hooks/
-│   │   └── useVoiceInput.js   # wrapper Web Speech API (es-ES)
 │   └── utils/
-│       ├── translateText.js   # MOCK del traductor (futuro: Claude API)
-│       └── signMap.js         # diccionario seña → video
-├── tailwind.config.js
-├── postcss.config.js
-├── vite.config.js
-└── index.html
-```
+ 
+Conexión futura con IA
 
-## Cómo correr
+Frontend → API Python:
 
-```bash
-npm install
-npm run dev
-```
+fetch("http://127.0.0.1:8000/predict", {
+  method: "POST",
+  body: formData
+})
 
-La app abre en http://localhost:5173.
+Respuesta:
 
-## Pantallas
-
-1. **Landing** — logo, nombre, tagline y botón *Comenzar*.
-2. **Modo** — elige entre *Traducir texto* y *Traducir voz*.
-3. **Traducción** — input arriba (campo + micrófono), avatar al centro, texto original y chips de señas abajo.
-
-## Conexión a Claude (próximo paso)
-
-Solo hay que reemplazar el cuerpo de `src/utils/translateText.js`:
-
-```js
-export async function translateText(input) {
-  const res = await fetch('/api/translate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: input })
-  })
-  const { signs } = await res.json()
-  return signs   // ["YO","NECESITAR","AYUDA"]
+{
+  "prediction": "A"
 }
-```
 
-El backend (no incluido en este MVP) debería enviarle el prompt a Claude y devolver el array de señas canónicas.
+Estado actual del proyecto
+✔ Frontend completo
+✔ Voz a texto funcionando
+✔ UI lista para demo
+🟡 Dataset en construcción
+🟡 Modelo IA en entrenamiento
+🔴 Integración full en progreso
 
-## Paleta
 
-| Token            | Hex       |
-|------------------|-----------|
-| signara-blue     | `#1F40C2` |
-| signara-sky      | `#9DCDF7` |
-| signara-navy     | `#1F2675` |
-| signara-purple   | `#7060A8` |
-| signara-lilac    | `#B5A3D2` |
 
-## Licencia
 
-MIT — proyecto de hackathon.
+📌Reglas del equipo
+❌ No usar Python 3.12+
+❌ No trabajar sin venv activado
+❌ Hacer git pull antes de programar
+✔ Mantener dataset organizado
+✔ Sincronizar cambios constantemente
+
+
+Objetivo del MVP
+Traducir texto/voz → señas
+Reconocer señas con cámara
+Mostrar avatar en tiempo real
