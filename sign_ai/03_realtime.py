@@ -1,95 +1,63 @@
 import cv2
 import mediapipe as mp
 import numpy as np
-import joblib
+import json
+import tensorflow as tf
 import pyttsx3
-
 from core.config import *
 from core.extractor import extraer_puntos
 
-modelo = joblib.load(MODEL_PATH)
+# Cargar recursos
+model = tf.keras.models.load_model(MODEL_PATH)
+with open(LABEL_PATH, "r") as f:
+    labels = json.load(f)
 
 motor = pyttsx3.init()
-
-mp_holistic = mp.solutions.holistic
-
-holistic = mp_holistic.Holistic(
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5
-)
+holistic = mp.solutions.holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
 buffer = []
-
-historial = []
-
-ultima = ""
-
+ultima_prediccion = ""
+contador_estabilidad = 0
 cam = cv2.VideoCapture(0)
 
-while True:
-
+while cam.isOpened():
     ret, frame = cam.read()
-
-    if not ret:
-        break
-
+    if not ret: break
     frame = cv2.flip(frame, 1)
-
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
     resultados = holistic.process(rgb)
-
-    features = extraer_puntos(resultados)
-
-    buffer.append(features)
-
-    if len(buffer) > SEQ_LEN:
-        buffer.pop(0)
+    
+    # Extraer y manejar buffer
+    puntos = extraer_puntos(resultados)
+    buffer.append(puntos)
+    if len(buffer) > SEQ_LEN: buffer.pop(0)
 
     if len(buffer) == SEQ_LEN:
-
-        entrada = np.array(buffer).flatten().reshape(1, -1)
-
-        pred = modelo.predict(entrada)[0]
-
-        probs = modelo.predict_proba(entrada)
-
-        confianza = np.max(probs)
+        # Predicción con LSTM
+        res = model.predict(np.expand_dims(buffer, axis=0), verbose=0)[0]
+        id_clase = np.argmax(res)
+        confianza = res[id_clase]
 
         if confianza > UMBRAL_CONFIANZA:
+            clase_predicha = labels[id_clase]
+            
+            if clase_predicha == ultima_prediccion:
+                contador_estabilidad += 1
+            else:
+                contador_estabilidad = 0
+                ultima_prediccion = clase_predicha
 
-            historial.append(pred)
-
-            if len(historial) > FRAMES_ESTABILIDAD:
-                historial.pop(0)
-
-            if historial.count(pred) == FRAMES_ESTABILIDAD:
-
-                if pred != ultima and pred != "IDLE":
-
-                    ultima = pred
-
-                    print(pred)
-
-                    motor.say(pred)
-
+            if contador_estabilidad == FRAMES_ESTABILIDAD:
+                if clase_predicha != "IDLE":
+                    print(f"Predicción: {clase_predicha} ({confianza:.2f})")
+                    motor.say(clase_predicha)
                     motor.runAndWait()
+                contador_estabilidad = 0
 
-    cv2.putText(
-        frame,
-        f"Signara: {ultima}",
-        (20, 50),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        1,
-        (255, 0, 0),
-        2
-    )
-
-    cv2.imshow("Signara Realtime", frame)
-
-    if cv2.waitKey(1) == 27:
-        break
+    cv2.putText(frame, f"IA: {ultima_prediccion}", (20, 60), 
+                cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 0), 2)
+    cv2.imshow("Signara Realtime LSTM", frame)
+    if cv2.waitKey(1) == 27: break
 
 cam.release()
-
 cv2.destroyAllWindows()
