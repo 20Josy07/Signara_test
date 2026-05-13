@@ -45,3 +45,5 @@ node_modules/
 dist/
 dist-ssr/
 *.local
+.vercel
+.env*.local
