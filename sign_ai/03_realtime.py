@@ -30,6 +30,9 @@ print(f"🧠 Clases: {labels}")
 # =========================================
 motor = pyttsx3.init()
 
+# Velocidad voz
+motor.setProperty('rate', 150)
+
 # =========================================
 # MEDIAPIPE HOLISTIC
 # =========================================
@@ -48,6 +51,7 @@ holistic = mp_holistic.Holistic(
 buffer = []
 
 ultima_prediccion = ""
+ultima_hablada = ""
 
 contador_estabilidad = 0
 
@@ -72,7 +76,7 @@ while cam.isOpened():
     # BGR -> RGB
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    # Procesar
+    # Procesar landmarks
     resultados = holistic.process(rgb)
 
     # =========================================
@@ -137,7 +141,9 @@ while cam.isOpened():
 
         continue
 
-    # Buffer
+    # =========================================
+    # BUFFER
+    # =========================================
     buffer.append(puntos)
 
     # Mantener tamaño exacto
@@ -163,12 +169,12 @@ while cam.isOpened():
 
         except Exception as e:
 
-            print(f"❌ Error predicción:")
+            print("❌ Error predicción:")
             print(e)
 
             continue
 
-        # Clase
+        # Clase y confianza
         id_clase = np.argmax(res)
 
         confianza = res[id_clase]
@@ -176,10 +182,13 @@ while cam.isOpened():
         clase_predicha = labels[id_clase]
 
         # =========================================
-        # ESTABILIDAD
+        # FILTRO CONFIANZA
         # =========================================
         if confianza > UMBRAL_CONFIANZA:
 
+            # =========================================
+            # ESTABILIDAD
+            # =========================================
             if clase_predicha == ultima_prediccion:
 
                 contador_estabilidad += 1
@@ -189,12 +198,22 @@ while cam.isOpened():
                 contador_estabilidad = 0
                 ultima_prediccion = clase_predicha
 
+                # Permitir volver a hablar
+                if clase_predicha != ultima_hablada:
+                    ultima_hablada = ""
+
             # =========================================
             # HABLAR
             # =========================================
             if contador_estabilidad >= FRAMES_ESTABILIDAD:
 
-                if clase_predicha != "IDLE":
+                # Solo hablar si:
+                # - no es IDLE
+                # - no habló ya esta letra
+                if (
+                    clase_predicha != "IDLE"
+                    and clase_predicha != ultima_hablada
+                ):
 
                     texto = (
                         f"📢 {clase_predicha} "
@@ -203,9 +222,21 @@ while cam.isOpened():
 
                     print(texto)
 
-                    motor.say(clase_predicha)
-                    motor.runAndWait()
+                    try:
 
+                        motor.say(clase_predicha)
+
+                        motor.runAndWait()
+
+                    except Exception as e:
+
+                        print("❌ Error voz:")
+                        print(e)
+
+                    # Guardar última hablada
+                    ultima_hablada = clase_predicha
+
+                # Reiniciar estabilidad
                 contador_estabilidad = 0
 
     # =========================================
@@ -219,6 +250,7 @@ while cam.isOpened():
         -1
     )
 
+    # Texto principal
     cv2.putText(
         frame,
         f"IA: {ultima_prediccion}",
@@ -229,6 +261,7 @@ while cam.isOpened():
         2
     )
 
+    # Confianza
     if len(buffer) == SEQ_LEN:
 
         cv2.putText(
@@ -249,8 +282,10 @@ while cam.isOpened():
         frame
     )
 
+    # =========================================
     # ESC
-    if cv2.waitKey(1) == 27:
+    # =========================================
+    if cv2.waitKey(1) & 0xFF == 27:
         break
 
 # =========================================
@@ -259,3 +294,4 @@ while cam.isOpened():
 cam.release()
 
 cv2.destroyAllWindows()
+
