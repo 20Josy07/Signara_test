@@ -13,13 +13,14 @@ os.makedirs("models", exist_ok=True)
 # =========================
 # IA (DIMENSIONES)
 # =========================
-# Cara (468) + Manos (21*2) + Pose (33) = 543 puntos
-# 543 puntos * 3 coordenadas (x, y, z) = 1629 features
-MAX_FEATURES = 1629
+# Cara refinada (478) + Pose (33) + Manos (21*2)
+# Total = 553 puntos
+# 553 * 3 coordenadas (x,y,z) = 1659 features
+MAX_FEATURES = 1659
 
-# Cuántos frames componen una seña (Aumentado a 30 para palabras fluidas)
-SEQ_LEN = 30 
+# Frames por seña
+SEQ_LEN = 30
 
-# Umbrales para Realtime
+# Realtime
 UMBRAL_CONFIANZA = 0.70
 FRAMES_ESTABILIDAD = 3
