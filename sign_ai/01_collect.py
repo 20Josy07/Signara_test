@@ -115,7 +115,9 @@ while cam.isOpened():
 
         # Seguridad
         if len(features) != MAX_FEATURES:
+
             print(f"⚠ ERROR FEATURES: {len(features)}")
+
             continue
 
         secuencia.append(features)
@@ -134,13 +136,20 @@ while cam.isOpened():
         # Cuando completa los frames
         if len(secuencia) == SEQ_LEN:
 
-            os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
+            os.makedirs(
+                os.path.dirname(DATA_PATH),
+                exist_ok=True
+            )
 
-            with open(DATA_PATH, "a", newline="") as f:
+            with open(
+                DATA_PATH,
+                "a",
+                newline=""
+            ) as f:
 
                 writer = csv.writer(f)
 
-                # 30 frames * 1659 features = 49770 valores
+                # 30 frames * 1659 features
                 writer.writerow(
                     [etiqueta] +
                     np.array(secuencia).flatten().tolist()
@@ -174,12 +183,15 @@ while cam.isOpened():
     # =========================================
     # TECLAS
     # =========================================
-    key = cv2.waitKey(1)
+    key = cv2.waitKey(1) & 0xFF
 
     # S = grabar
     if key == ord('s'):
+
         grabando = True
         secuencia = []
+
+        print("🔴 Grabando muestra...")
 
     # ESC = salir
     if key == 27:
@@ -189,4 +201,5 @@ while cam.isOpened():
 # LIMPIEZA
 # =========================================
 cam.release()
+
 cv2.destroyAllWindows()
