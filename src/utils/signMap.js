@@ -1,3 +1,5 @@
+import { deduplicateChars } from './textNormalizer.js'
+
 /**
  * signMap
  * Mapping of canonical sign tokens (uppercase, no accents) to a video clip URL.
@@ -69,12 +71,17 @@ export function setCurrentAvatar(id) {
  *  - replace spaces with underscores
  */
 export function normalizeSign(word) {
-  return String(word)
+  return deduplicateChars(String(word))
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toUpperCase()
     .replace(/\s+/g, '_')
     .trim()
+}
+
+/** Returns all canonical sign keys available in the current build. */
+export function getAllSignKeys() {
+  return Object.keys(SIGN_FILES)
 }
 
 /**

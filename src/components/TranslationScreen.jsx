@@ -4,30 +4,13 @@ import AvatarPlayer from './AvatarPlayer.jsx'
 import TextInputPanel from './TextInputPanel.jsx'
 import SignChips from './SignChips.jsx'
 import { translateText } from '../utils/translateText.js'
+import { textToSignTokens } from '../utils/textNormalizer.js'
 import {
   getCurrentAvatar,
-  getSignSrc,
-  normalizeSign,
+  getAllSignKeys,
   setCurrentAvatar
 } from '../utils/signMap.js'
 
-/**
- * TranslationScreen
- *
- * Coexisting playback paths:
- *   TYPED:  user submits text -> translateText() -> avatarRef.replace(signs)
- *   VOZ EN VIVO:
- *     interim word -> avatarRef.queue(word) (instant)
- *     final phrase -> translateText() polish + diff-queue any missing signs
- *
- * Includes a global "Limpiar" button (header) that resets:
- *   - avatar (clear queue, stop video, hide both buffers)
- *   - voice  (stop mic, clear input, reset word tracker)
- *   - state  (chips, original text, active sign, busy, liveMode)
- *
- * The avatar character itself can be swapped via the "Personalizar" button
- * rendered below the avatar by <AvatarPlayer />.
- */
 export default function TranslationScreen({
   initialMode = 'text',
   avatarId: initialAvatarId,
@@ -45,26 +28,18 @@ export default function TranslationScreen({
   const avatarRef = useRef(null)
   const inputRef = useRef(null)
   const liveQueuedRef = useRef([])
-  // Buffer for the previous live word so we can detect 2-word compound signs
-  // in real time (p.ej. "tengo sed" -> TENGO_SED, "por favor" -> POR_FAVOR,
-  // "te amo" -> TE_AMO, "como estas" -> COMO_ESTAS).
   const pendingWordRef = useRef('')
 
-  // Sync the prop-driven avatar (from App's localStorage) into local state.
   useEffect(() => {
     if (initialAvatarId && initialAvatarId !== avatarId) {
       setAvatarId(initialAvatarId)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialAvatarId])
 
-  // Keep the module-level "active avatar" in sync with React state so that
-  // getSignSrc() resolves to the right folder for both typed and live flows.
   useEffect(() => {
     setCurrentAvatar(avatarId)
   }, [avatarId])
 
-  // --- Reset helpers --------------------------------------------------------
   const resetVoice = useCallback(() => {
     if (inputRef.current) inputRef.current.clear()
   }, [])
@@ -84,7 +59,6 @@ export default function TranslationScreen({
   }, [])
 
   const handleReset = useCallback(() => {
-    console.log('[TranslationScreen] handleReset()')
     resetVoice()
     resetAvatar()
     resetState()
@@ -94,42 +68,30 @@ export default function TranslationScreen({
   }, [resetVoice, resetAvatar, resetState])
 
   const handleAvatarChange = useCallback((id) => {
-    console.log('[TranslationScreen] avatar selected:', id)
     setCurrentAvatar(id)
     setAvatarId(id)
     if (avatarRef.current) avatarRef.current.clear()
     if (onAvatarChange) onAvatarChange(id)
   }, [onAvatarChange])
 
-  // --- TYPED path -----------------------------------------------------------
+  // --- TYPED path (Con el SEGURO de minúsculas) ---
   const handleSubmit = useCallback(async (text) => {
-    setBusy(true)
-    setOriginalText(text)
-    setLiveMode(false)
-    liveQueuedRef.current = []
-    pendingWordRef.current = ''
+    setBusy(true);
+    setOriginalText(text); // Guardamos el texto tal cual lo puso el usuario
     try {
-      const result = await translateText(text)
-      console.log('[TranslationScreen] translateText ->', result)
-      setSigns(result)
-      if (avatarRef.current) avatarRef.current.replace(result)
+      const result = await translateText(text);
+      setSigns(result);
+      if (avatarRef.current) {
+        avatarRef.current.replace(result);
+      }
     } catch (e) {
-      console.error('translateText failed:', e)
-      setSigns([])
+      console.error(e);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }, [])
 
-  // --- LIVE VOICE path ------------------------------------------------------
-  // Para frases compuestas mantenemos pendingWordRef. Cuando llega una nueva
-  // palabra:
-  //   1. Probamos pendingWord + nueva  (ej: "tengo" + "sed" -> TENGO_SED).
-  //      Si hay video, lo encolamos y limpiamos pending.
-  //   2. Si no hay compuesto, probamos la palabra sola (ej: "hola" -> HOLA,
-  //      "gracias" -> GRACIAS).
-  //   3. Si no hay nada, guardamos la palabra como pending por si forma
-  //      un compuesto con la siguiente.
+  // --- LIVE VOICE path ---
   const handleLiveWord = useCallback((rawWord) => {
     const cleaned = String(rawWord || '').trim()
     if (!cleaned) return
@@ -137,36 +99,36 @@ export default function TranslationScreen({
     setLiveMode(true)
     setOriginalText((prev) => (prev ? prev + ' ' : '') + cleaned)
 
-    const queueSign = (sign) => {
-      setSigns((prev) => [...prev, sign])
+    const signKeys = getAllSignKeys()
+
+    const queueSign = (signToken) => {
+      setSigns((prev) => [...prev, signToken])
       if (avatarRef.current) {
-        avatarRef.current.queue(sign)
-        liveQueuedRef.current.push(sign)
+        avatarRef.current.queue(signToken)
+        liveQueuedRef.current.push(signToken)
       }
     }
 
-    // 1) Intento de seña compuesta con la palabra pendiente.
+    // Try compound (pending word + new word) first
     if (pendingWordRef.current) {
-      const compoundSign = normalizeSign(pendingWordRef.current + ' ' + cleaned)
-      if (getSignSrc(compoundSign)) {
-        console.log('LIVE WORD compound:', compoundSign)
-        queueSign(compoundSign)
+      const compound = pendingWordRef.current + ' ' + cleaned
+      const tokens = textToSignTokens(compound, signKeys)
+      if (tokens.length === 1) {
+        queueSign(tokens[0])
         pendingWordRef.current = ''
         return
       }
     }
 
-    // 2) Intento de seña individual.
-    const singleSign = normalizeSign(cleaned)
-    if (getSignSrc(singleSign)) {
-      console.log('LIVE WORD single:', singleSign)
-      queueSign(singleSign)
+    // Try single word with full normalization + fuzzy matching
+    // "holaaaa" → dedup → "hola" → fuzzy → "HOLA"
+    const tokens = textToSignTokens(cleaned, signKeys)
+    if (tokens.length > 0) {
+      tokens.forEach(queueSign)
       pendingWordRef.current = ''
       return
     }
 
-    // 3) Sin coincidencia: guardamos la palabra por si forma un compuesto
-    //    con la siguiente (ej: "tengo" -> espera "sed").
     pendingWordRef.current = cleaned
   }, [])
 
@@ -175,6 +137,7 @@ export default function TranslationScreen({
     try {
       const polished = await translateText(text)
       if (!polished || polished.length === 0) return
+      
       setSigns(polished)
 
       const liveLeft = [...liveQueuedRef.current]
@@ -255,24 +218,24 @@ export default function TranslationScreen({
           </p>
         </div>
         <div className="glass-card p-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-signara-purple">Senas traducidas</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-signara-purple">Señas traducidas</p>
           <div className="mt-3">
-            <SignChips signs={signs} activeIndex={activeIndex} />
+            {/* Renderizado visual limpio para el usuario final */}
+            <SignChips 
+              signs={signs.map(s => s.replace('.mp4', '').replace(/_/g, ' ').toUpperCase())} 
+              activeIndex={activeIndex} 
+            />
           </div>
         </div>
       </div>
 
       <footer className="mt-6 text-center text-xs text-white/60">
-        MVP - Streaming en tiempo real con datos simulados.
+        Traducción en tiempo real · voz o texto a lengua de señas
       </footer>
     </section>
   )
 }
 
-/**
- * ResetButton - shared "LIMPIAR" pill, prominent enough to spot but tucked
- * to the right side of the header so it never competes with the primary CTA.
- */
 function ResetButton({ onClick }) {
   return (
     <button
