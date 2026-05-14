@@ -26,8 +26,14 @@ export async function translateText(text) {
     if (!response.ok) throw new Error('API error')
 
     const data = await response.json()
-    if (data.signs && data.signs.length > 0) return data.signs
-    // API returned empty array — fall through to local
+    if (data.signs && data.signs.length > 0) {
+      // Normalize: strip ".mp4" suffix if present (legacy API format), uppercase
+      const normalized = data.signs
+        .map(s => String(s).replace(/\.mp4$/i, '').toUpperCase().replace(/\s+/g, '_').trim())
+        .filter(s => signKeys.includes(s))
+      if (normalized.length > 0) return normalized
+    }
+    // API returned empty or unrecognized tokens — fall through to local
   } catch {
     // API unavailable — silent fallback
   }
