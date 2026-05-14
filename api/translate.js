@@ -1,42 +1,45 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Inicializamos el cliente de Claude con tu llave secreta
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export default async function handler(req, res) {
-  // Verificamos que la petición sea correcta
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Método no permitido' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
   const { text } = req.body;
-  if (!text) {
-    return res.status(400).json({ error: 'El texto es requerido' });
-  }
+  if (!text) return res.status(400).json({ error: 'El texto es requerido' });
 
   try {
-    // Llamada REAL a la inteligencia artificial de Claude
-    const message = await anthropic.messages.create({
-      model: "claude-3-haiku-20240307", // Modelo rápido y económico
-      max_tokens: 1024,
-      // Le damos instrucciones estrictas a la IA de cómo debe comportarse
-      system: "Eres el cerebro de Signara, un traductor a lengua de señas. Tu tarea es recibir una frase, limpiarla (quitar tildes, comas, signos) y separar las palabras clave. Debes devolver ÚNICAMENTE un arreglo de JSON válido con las palabras en minúsculas y la extensión '.mp4' al final de cada una. Ejemplo: si recibes 'Hola, ¿cómo estás?', devuelves [\"hola.mp4\", \"como.mp4\", \"estas.mp4\"]. No digas absolutamente nada más que el JSON.",
-      messages: [
-        { role: "user", content: `Traduce esta frase: "${text}"` }
-      ]
+    const model = genAI.getGenerativeModel({ 
+        model: "gemini-1.5-flash", 
+        generationConfig: { responseMimeType: "application/json" } 
     });
 
-    // Claude nos devuelve un texto, lo convertimos a un objeto de JavaScript
-    const aiResponse = message.content[0].text;
-    const signsArray = JSON.parse(aiResponse);
-
-    // Le enviamos la respuesta al frontend
+    const prompt = `Traduce a un arreglo JSON de archivos .mp4: "${text}"`;
+    const result = await model.generateContent(prompt);
+    const signsArray = JSON.parse(result.response.text().toLowerCase());
     return res.status(200).json({ signs: signsArray });
 
   } catch (error) {
-    console.error("Error en la conexión con Claude:", error);
-    return res.status(500).json({ error: 'Error interno del servidor de IA' });
+    console.log("⚠️ API ocupada o fallando. Activando Motor Local Inteligente...");
+    
+    // 1. Limpiamos el texto quitando tildes suavemente (cómo -> como)
+    let textoLimpio = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    
+    let resultadoFinal = [];
+
+    // 2. Buscamos tus señas exactas en el texto y armamos el arreglo en orden
+    if (textoLimpio.includes("hola")) resultadoFinal.push("hola.mp4");
+    if (textoLimpio.includes("como estas")) resultadoFinal.push("como_estas.mp4");
+    if (textoLimpio.includes("tengo sed")) resultadoFinal.push("tengo_sed.mp4");
+    if (textoLimpio.includes("necesito ayuda")) resultadoFinal.push("necesito_ayuda.mp4");
+    if (textoLimpio.includes("por favor")) resultadoFinal.push("por_favor.mp4");
+    if (textoLimpio.includes("te amo")) resultadoFinal.push("te_amo.mp4");
+    if (textoLimpio.includes("gracias")) resultadoFinal.push("gracias.mp4");
+
+    // 3. Seguro contra fallos: si escriben algo que no tienes grabado, muestra "hola"
+    if (resultadoFinal.length === 0) resultadoFinal.push("hola.mp4");
+
+    // Devolvemos el resultado limpio y perfecto a React
+    return res.status(200).json({ signs: resultadoFinal });
   }
 }

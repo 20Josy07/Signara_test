@@ -141,7 +141,7 @@ export default function TranslationScreen({
       setSigns(polished)
 
       const liveLeft = [...liveQueuedRef.current]
-      for (const sign of polished) {
+      for (const sign of fixedPolished) {
         const idx = liveLeft.indexOf(sign)
         if (idx !== -1) {
           liveLeft.splice(idx, 1)
