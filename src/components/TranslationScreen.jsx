@@ -4,10 +4,10 @@ import AvatarPlayer from './AvatarPlayer.jsx'
 import TextInputPanel from './TextInputPanel.jsx'
 import SignChips from './SignChips.jsx'
 import { translateText } from '../utils/translateText.js'
+import { textToSignTokens } from '../utils/textNormalizer.js'
 import {
   getCurrentAvatar,
-  getSignSrc,
-  normalizeSign,
+  getAllSignKeys,
   setCurrentAvatar
 } from '../utils/signMap.js'
 
@@ -80,11 +80,9 @@ export default function TranslationScreen({
     setOriginalText(text); // Guardamos el texto tal cual lo puso el usuario
     try {
       const result = await translateText(text);
-      // 'result' ya viene en orden desde el backend
-      console.log("Orden recibido:", result);
       setSigns(result);
       if (avatarRef.current) {
-        avatarRef.current.replace(result); // Le pasamos la lista ordenada al avatar
+        avatarRef.current.replace(result);
       }
     } catch (e) {
       console.error(e);
@@ -101,28 +99,32 @@ export default function TranslationScreen({
     setLiveMode(true)
     setOriginalText((prev) => (prev ? prev + ' ' : '') + cleaned)
 
-    const queueSign = (sign) => {
-      // Aplicamos el toLowerCase también a las señas en vivo
-      const cleanSign = sign.toLowerCase()
-      setSigns((prev) => [...prev, cleanSign])
+    const signKeys = getAllSignKeys()
+
+    const queueSign = (signToken) => {
+      setSigns((prev) => [...prev, signToken])
       if (avatarRef.current) {
-        avatarRef.current.queue(cleanSign)
-        liveQueuedRef.current.push(cleanSign)
+        avatarRef.current.queue(signToken)
+        liveQueuedRef.current.push(signToken)
       }
     }
 
+    // Try compound (pending word + new word) first
     if (pendingWordRef.current) {
-      const compoundSign = normalizeSign(pendingWordRef.current + ' ' + cleaned)
-      if (getSignSrc(compoundSign)) {
-        queueSign(compoundSign)
+      const compound = pendingWordRef.current + ' ' + cleaned
+      const tokens = textToSignTokens(compound, signKeys)
+      if (tokens.length === 1) {
+        queueSign(tokens[0])
         pendingWordRef.current = ''
         return
       }
     }
 
-    const singleSign = normalizeSign(cleaned)
-    if (getSignSrc(singleSign)) {
-      queueSign(singleSign)
+    // Try single word with full normalization + fuzzy matching
+    // "holaaaa" → dedup → "hola" → fuzzy → "HOLA"
+    const tokens = textToSignTokens(cleaned, signKeys)
+    if (tokens.length > 0) {
+      tokens.forEach(queueSign)
       pendingWordRef.current = ''
       return
     }
@@ -136,8 +138,7 @@ export default function TranslationScreen({
       const polished = await translateText(text)
       if (!polished || polished.length === 0) return
       
-      const fixedPolished = polished.map(s => s.toLowerCase());
-      setSigns(fixedPolished)
+      setSigns(polished)
 
       const liveLeft = [...liveQueuedRef.current]
       for (const sign of fixedPolished) {
@@ -229,7 +230,7 @@ export default function TranslationScreen({
       </div>
 
       <footer className="mt-6 text-center text-xs text-white/60">
-        MVP - Streaming en tiempo real con datos simulados.
+        Traducción en tiempo real · voz o texto a lengua de señas
       </footer>
     </section>
   )

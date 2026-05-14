@@ -1,51 +1,36 @@
-const normalize = (str) =>
-  str.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w\s]/g, "").trim();
+import { textToSignTokens } from './textNormalizer.js'
+import { getAllSignKeys } from './signMap.js'
 
-const SIGN_MAP = {
-  "como estas": "como_estas",
-  "como esta": "como_estas",
-  "que tal": "como_estas",
-  "necesito ayuda": "necesito_ayuda",
-  "por favor": "por_favor",
-  "porfavor": "por_favor",
-  "tengo sed": "tengo_sed",
-  "te amo": "te_amo",
-  "te quiero": "te_amo",
-  "hola": "hola",
-  "gracias": "gracias",
-  "muchas gracias": "gracias",
-  "ayuda": "necesito_ayuda",
-  "auxilio": "necesito_ayuda",
-  "socorro": "necesito_ayuda",
-  "sed": "tengo_sed",
-};
+/**
+ * translateText
+ * Converts free-form Spanish text into an ordered array of sign tokens.
+ *
+ * Strategy:
+ *  1. Try the backend /api/translate (may enrich with NLP/grammar ordering).
+ *  2. If the API is unavailable or returns nothing, fall back to local
+ *     normalization + fuzzy matching (works fully offline).
+ *
+ * @param {string} text
+ * @returns {Promise<string[]>} e.g. ["HOLA", "POR_FAVOR"]
+ */
+export async function translateText(text) {
+  const signKeys = getAllSignKeys()
 
-function matchSigns(text) {
-  const normalized = normalize(text);
-  const result = [];
-  let remaining = normalized;
+  try {
+    const response = await fetch('/api/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
 
-  const sortedKeys = Object.keys(SIGN_MAP).sort((a, b) => b.length - a.length);
+    if (!response.ok) throw new Error('API error')
 
-  while (remaining.length > 0) {
-    let matched = false;
-    for (const phrase of sortedKeys) {
-      if (remaining === phrase || remaining.startsWith(phrase + " ")) {
-        result.push(SIGN_MAP[phrase]);
-        remaining = remaining.slice(phrase.length).trimStart();
-        matched = true;
-        break;
-      }
-    }
-    if (!matched) {
-      const spaceIdx = remaining.indexOf(" ");
-      remaining = spaceIdx === -1 ? "" : remaining.slice(spaceIdx + 1);
-    }
+    const data = await response.json()
+    if (data.signs && data.signs.length > 0) return data.signs
+    // API returned empty array — fall through to local
+  } catch {
+    // API unavailable — silent fallback
   }
 
-  return result;
-}
-
-export async function translateText(text) {
-  return matchSigns(text);
+  return textToSignTokens(text, signKeys)
 }
