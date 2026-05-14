@@ -17,7 +17,7 @@ const HISTORY_LEN = 20
 const HEURISTIC_COOLDOWN_MS = 1500
 
 // ML pipeline — deben coincidir con sign_ai/core/config.py
-const ML_API_URL = 'http://localhost:8000'
+const ML_API_URL = import.meta.env.VITE_ML_API_URL || 'http://localhost:8000'
 const SEQ_LEN = 30
 const MAX_FEATURES = 1659
 const FACE_COUNT = 478   // refine_face_landmarks=True → 478 landmarks (468 + 10 iris)
@@ -25,7 +25,8 @@ const POSE_COUNT = 33
 const HAND_COUNT = 21
 const STABILITY_NEEDED = 3    // predicciones consecutivas iguales para confirmar
 const PREDICT_EVERY = 5       // enviar al API cada N frames (~6 veces/seg a 30fps)
-const ML_COOLDOWN_MS = 600    // cooldown entre detecciones ML (conversación fluida)
+const ML_COOLDOWN_MS = 600    // cooldown entre señas DISTINTAS
+const SAME_SIGN_COOLDOWN_MS = 2500 // cooldown para REPETIR la misma seña (evita spam al mantener)
 
 function loadScript(url) {
   return new Promise((resolve, reject) => {
@@ -99,6 +100,7 @@ export default function InterpretScreen({ onBack, onHome }) {
   const mlAvailableRef      = useRef(false)
   const apiInFlightRef      = useRef(false)
   const stabilityRef        = useRef({ count: 0, prediction: '' })
+  const lastEmittedSignRef  = useRef('')   // última seña disparada (para cooldown diferenciado)
   const sentenceClearTimer  = useRef(null)
   const handModelRef        = useRef(null)
 
@@ -383,7 +385,10 @@ export default function InterpretScreen({ onBack, onHome }) {
                   s.prediction = prediction
                 }
                 if (s.count >= STABILITY_NEEDED) {
-                  if (now - lastDetectionRef.current > ML_COOLDOWN_MS) {
+                  const isSameSign = prediction === lastEmittedSignRef.current
+                  const requiredCooldown = isSameSign ? SAME_SIGN_COOLDOWN_MS : ML_COOLDOWN_MS
+                  if (now - lastDetectionRef.current > requiredCooldown) {
+                    lastEmittedSignRef.current = prediction
                     triggerRecognition(prediction, prediction, confidence)
                     stabilityRef.current = { count: 0, prediction: '' }
                   }
@@ -545,6 +550,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     frameCountRef.current       = 0
     stabilityRef.current        = { count: 0, prediction: '' }
     lastDetectionRef.current    = 0
+    lastEmittedSignRef.current  = ''
     setRunning(true)
   }
 
@@ -563,6 +569,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     frameCountRef.current       = 0
     stabilityRef.current        = { count: 0, prediction: '' }
     lastDetectionRef.current    = 0
+    lastEmittedSignRef.current  = ''
     if (sentenceClearTimer.current) clearTimeout(sentenceClearTimer.current)
     window?.speechSynthesis?.cancel()
   }, [])
@@ -608,15 +615,19 @@ export default function InterpretScreen({ onBack, onHome }) {
 
         <div className="flex items-center gap-3">
           {/* Indicador de modo ML */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20 text-xs">
+          <button
+            onClick={!mlMode && !mlConnecting ? retryMlConnection : undefined}
+            className={'flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20 text-xs ' + (!mlMode && !mlConnecting ? 'cursor-pointer hover:bg-white/20 transition' : 'cursor-default')}
+            title={!mlMode && !mlConnecting ? 'Reintentar conexión con IA' : undefined}
+          >
             <span className={`inline-block h-2 w-2 rounded-full ${
               mlConnecting   ? 'bg-yellow-300 animate-pulse' :
               mlMode         ? 'bg-blue-400 animate-pulse'   : 'bg-white/40'
             }`} />
             <span className="text-white/80">
-              {mlConnecting ? 'Conectando IA...' : mlMode ? 'Modo IA' : 'Modo básico'}
+              {mlConnecting ? 'Conectando...' : mlMode ? 'Modo IA' : 'Modo básico'}
             </span>
-          </div>
+          </button>
 
           <ResetButton onClick={handleReset} />
 
@@ -777,26 +788,6 @@ export default function InterpretScreen({ onBack, onHome }) {
             )}
           </div>
 
-          {/* Instrucciones para activar el modo IA */}
-          {!mlMode && !mlConnecting && (
-            <div className="glass-card p-4 border border-yellow-300/30">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-yellow-600">
-                Modo básico activo
-              </p>
-              <p className="mt-1 text-xs text-signara-navy/70">
-                Para activar el reconocimiento con IA, inicia el servidor:
-              </p>
-              <code className="mt-2 block text-[11px] bg-black/10 rounded p-2 text-signara-navy font-mono leading-relaxed">
-                cd sign_ai<br />
-                pip install -r requirements_api.txt<br />
-                uvicorn api:app --port 8000
-              </code>
-              <button onClick={retryMlConnection}
-                className="mt-3 w-full py-1.5 rounded-lg bg-signara-purple/20 hover:bg-signara-purple/30 text-signara-purple text-xs font-semibold transition">
-                Reintentar conexión
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
