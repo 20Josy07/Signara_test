@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { AVATARS, getSignSrc, normalizeSign } from '../utils/signMap.js'
+import { AVATARS, normalizeSign } from '../utils/signMap.js'
+import { resolveSign } from '../utils/signPlayer.js'
 
 /**
  * AvatarPlayer
@@ -84,7 +85,6 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
   function playNext() {
     refreshQueueLen()
     if (queueRef.current.length === 0) {
-      console.log('QUEUE: empty - stopping')
       setPlaying(false)
       setCurrentLabel(null)
       if (onFinish) onFinish()
@@ -92,19 +92,28 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
     }
     const sign = queueRef.current.shift()
     refreshQueueLen()
-    const src = getSignSrc(sign)
-    console.log('QUEUE:', queueRef.current)
-    console.log('Playing sign:', sign, 'src:', src)
 
-    if (!src) {
-      // No video for this sign - skip to the next entry
+    const resolved = resolveSign(sign)
+
+    if (!resolved) {
       setTimeout(playNext, 50)
       return
     }
 
     setPlaying(true)
     triedFallbackRef.current = false
-    preloadAndSwap(sign, src)
+
+    if (resolved.type === 'animation') {
+      // 3D avatar animation path — will be activated when the avatar API is ready.
+      // When ready: send resolved.token to resolved.endpoint and animate the avatar.
+      // For now fall back to video if available, otherwise skip.
+      const fallback = resolveSign(sign)
+      if (fallback?.type === 'video') preloadAndSwap(sign, fallback.src)
+      else setTimeout(playNext, 50)
+      return
+    }
+
+    preloadAndSwap(sign, resolved.src)
   }
 
   /**
@@ -184,15 +193,9 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
   function queueAnimation(rawSign) {
     if (!rawSign) return
     const sign = normalizeSign(rawSign)
-    const src = getSignSrc(sign)
-    if (!src) {
-      console.log('LIVE WORD:', sign, '-> no video, skipped')
-      return
-    }
+    if (!resolveSign(sign)) return  // no video and no animation for this token
     queueRef.current.push(sign)
     refreshQueueLen()
-    console.log('LIVE WORD:', sign, '-> queued')
-    console.log('QUEUE:', queueRef.current)
     if (!isPlayingRef.current) playNext()
   }
 
@@ -214,7 +217,7 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
   function replaceQueue(newSigns) {
     queueRef.current = (newSigns || [])
       .map(normalizeSign)
-      .filter((s) => Boolean(getSignSrc(s)))
+      .filter((s) => Boolean(resolveSign(s)))
     refreshQueueLen()
     setPlaying(false)
     setCurrentLabel(null)
@@ -264,9 +267,6 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
   return (
     <div className="relative w-full">
       <div className="relative mx-auto aspect-[4/5] max-h-[58vh] w-full max-w-md rounded-4xl overflow-hidden shadow-glow bg-gradient-to-br from-signara-blue/20 via-signara-purple/15 to-signara-lilac/25 backdrop-blur-sm">
-        {/* Border overlay rendered on top of videos — avoids subpixel gap artifact */}
-        <div className="absolute inset-0 rounded-4xl ring-1 ring-inset ring-white/30 pointer-events-none z-20" />
-
         {/* DOUBLE-BUFFER: two stacked <video> elements that crossfade.
             Initial inline opacity 0; we drive opacity imperatively from
             preloadAndSwap() so React never re-applies stale styles. */}

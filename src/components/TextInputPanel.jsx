@@ -114,7 +114,7 @@ const TextInputPanel = forwardRef(function TextInputPanel(
 
   return (
     <form onSubmit={submit} className="w-full">
-      <div className={'glass-card flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-3 ' + (listening ? 'ring-2 ring-signara-purple/60 ring-offset-2 ring-offset-transparent' : '')}>
+      <div className={'glass-card flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-3 ' + (listening ? 'ring-2 ring-inset ring-signara-purple/50' : '')}>
         <button
           type="button"
           onClick={toggleMic}

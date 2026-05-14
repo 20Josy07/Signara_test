@@ -1,6 +1,22 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Vercel env var is GOOGLE_API_KEY
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+
+const SIGN_KEYS = ["HOLA", "COMO_ESTAS", "GRACIAS", "POR_FAVOR", "TENGO_SED", "TE_AMO", "NECESITO_AYUDA"];
+
+function localMatch(text) {
+  const t = text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const result = [];
+  if (t.includes("como estas") || t.includes("como esta") || t.includes("que tal")) result.push("COMO_ESTAS");
+  if (t.includes("necesito ayuda") || t.includes("auxilio") || t.includes("socorro")) result.push("NECESITO_AYUDA");
+  if (t.includes("por favor") || t.includes("porfavor")) result.push("POR_FAVOR");
+  if (t.includes("tengo sed") || (t.includes("sed") && !t.includes("desde"))) result.push("TENGO_SED");
+  if (t.includes("te amo") || t.includes("te quiero")) result.push("TE_AMO");
+  if (t.includes("gracias") || t.includes("muchas gracias")) result.push("GRACIAS");
+  if (t.includes("hola")) result.push("HOLA");
+  return result;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
@@ -9,37 +25,26 @@ export default async function handler(req, res) {
   if (!text) return res.status(400).json({ error: 'El texto es requerido' });
 
   try {
-    const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash", 
-        generationConfig: { responseMimeType: "application/json" } 
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      generationConfig: { responseMimeType: "application/json" }
     });
 
-    const prompt = `Traduce a un arreglo JSON de archivos .mp4: "${text}"`;
+    const prompt = `Eres el motor de traducción de Signara. Conviertes frases en español a tokens de lengua de señas.
+Usa ÚNICAMENTE estos tokens: ${JSON.stringify(SIGN_KEYS)}.
+Devuelve SOLO un arreglo JSON válido con los tokens en MAYÚSCULAS, en el mismo orden de la frase.
+Ejemplo: "Hola, ¿cómo estás?" → ["HOLA","COMO_ESTAS"]
+No escribas nada más que el JSON.
+Texto: "${text}"`;
+
     const result = await model.generateContent(prompt);
-    const signsArray = JSON.parse(result.response.text().toLowerCase());
-    return res.status(200).json({ signs: signsArray });
+    const responseText = result.response.text().trim();
+    const signsArray = JSON.parse(responseText.toUpperCase());
+    const validSigns = signsArray.filter(s => SIGN_KEYS.includes(s));
+    return res.status(200).json({ signs: validSigns.length > 0 ? validSigns : localMatch(text) });
 
   } catch (error) {
-    console.log("⚠️ API ocupada o fallando. Activando Motor Local Inteligente...");
-    
-    // 1. Limpiamos el texto quitando tildes suavemente (cómo -> como)
-    let textoLimpio = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    
-    let resultadoFinal = [];
-
-    // 2. Buscamos tus señas exactas en el texto y armamos el arreglo en orden
-    if (textoLimpio.includes("hola")) resultadoFinal.push("hola.mp4");
-    if (textoLimpio.includes("como estas")) resultadoFinal.push("como_estas.mp4");
-    if (textoLimpio.includes("tengo sed")) resultadoFinal.push("tengo_sed.mp4");
-    if (textoLimpio.includes("necesito ayuda")) resultadoFinal.push("necesito_ayuda.mp4");
-    if (textoLimpio.includes("por favor")) resultadoFinal.push("por_favor.mp4");
-    if (textoLimpio.includes("te amo")) resultadoFinal.push("te_amo.mp4");
-    if (textoLimpio.includes("gracias")) resultadoFinal.push("gracias.mp4");
-
-    // 3. Seguro contra fallos: si escriben algo que no tienes grabado, muestra "hola"
-    if (resultadoFinal.length === 0) resultadoFinal.push("hola.mp4");
-
-    // Devolvemos el resultado limpio y perfecto a React
-    return res.status(200).json({ signs: resultadoFinal });
+    console.log("⚠️ Gemini no disponible, usando motor local:", error.message);
+    return res.status(200).json({ signs: localMatch(text) });
   }
 }

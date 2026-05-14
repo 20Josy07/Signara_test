@@ -24,11 +24,14 @@ export default function TranslationScreen({
   const [busy, setBusy] = useState(false)
   const [liveMode, setLiveMode] = useState(false)
   const [avatarId, setAvatarId] = useState(initialAvatarId || getCurrentAvatar().id)
+  const [pendingWord, setPendingWord] = useState('')   // word waiting to form a compound
+  const [missedWord, setMissedWord] = useState('')    // word that had no sign match
 
   const avatarRef = useRef(null)
   const inputRef = useRef(null)
   const liveQueuedRef = useRef([])
   const pendingWordRef = useRef('')
+  const missedTimerRef = useRef(null)
 
   useEffect(() => {
     if (initialAvatarId && initialAvatarId !== avatarId) {
@@ -54,8 +57,11 @@ export default function TranslationScreen({
     setActiveSign(null)
     setBusy(false)
     setLiveMode(false)
+    setPendingWord('')
+    setMissedWord('')
     liveQueuedRef.current = []
     pendingWordRef.current = ''
+    if (missedTimerRef.current) clearTimeout(missedTimerRef.current)
   }, [])
 
   const handleReset = useCallback(() => {
@@ -116,6 +122,7 @@ export default function TranslationScreen({
       if (tokens.length === 1) {
         queueSign(tokens[0])
         pendingWordRef.current = ''
+        setPendingWord('')
         return
       }
     }
@@ -126,35 +133,32 @@ export default function TranslationScreen({
     if (tokens.length > 0) {
       tokens.forEach(queueSign)
       pendingWordRef.current = ''
+      setPendingWord('')
       return
     }
 
+    // No match — show briefly that the word wasn't found
     pendingWordRef.current = cleaned
+    setPendingWord(cleaned)
+    if (missedTimerRef.current) clearTimeout(missedTimerRef.current)
+    missedTimerRef.current = setTimeout(() => {
+      // Word still unmatched after next word arrives — mark as missed
+      if (pendingWordRef.current === cleaned) {
+        setMissedWord(cleaned)
+        pendingWordRef.current = ''
+        setPendingWord('')
+        setTimeout(() => setMissedWord(''), 2000)
+      }
+    }, 1500)
   }, [])
 
-  const handleVoiceFinal = useCallback(async (text) => {
-    if (!text) return
-    try {
-      const polished = await translateText(text)
-      if (!polished || polished.length === 0) return
-      
-      setSigns(polished)
-
-      const liveLeft = [...liveQueuedRef.current]
-      for (const sign of fixedPolished) {
-        const idx = liveLeft.indexOf(sign)
-        if (idx !== -1) {
-          liveLeft.splice(idx, 1)
-          continue
-        }
-        if (avatarRef.current) avatarRef.current.queue(sign)
-      }
-    } catch (e) {
-      console.warn('polish translateText failed:', e)
-    } finally {
-      liveQueuedRef.current = []
-      pendingWordRef.current = ''
-    }
+  // Called when the browser closes the speech session.
+  // We no longer call translateText here — it adds ~1-2s lag that breaks fluency.
+  // Live word-by-word processing already queued everything correctly.
+  const handleVoiceFinal = useCallback((_text) => {
+    liveQueuedRef.current = []
+    pendingWordRef.current = ''
+    setPendingWord('')
   }, [])
 
   const handlePanelSubmit = useCallback((text) => {
@@ -198,6 +202,22 @@ export default function TranslationScreen({
           onLiveWord={handleLiveWord}
           busy={busy}
         />
+        {/* Live voice feedback chips */}
+        {(pendingWord || missedWord) && (
+          <div className="mt-2 flex items-center gap-2 px-1">
+            {pendingWord && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 border border-white/30 text-white/80 text-xs animate-pulse">
+                <span className="h-1.5 w-1.5 rounded-full bg-white/60" />
+                "{pendingWord}"…
+              </span>
+            )}
+            {missedWord && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-white/50 text-xs line-through">
+                {missedWord}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 flex items-center justify-center my-6 animate-fade-up">
