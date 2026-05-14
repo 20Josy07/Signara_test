@@ -201,23 +201,9 @@ export default function TranslationScreen({
           onSubmit={handlePanelSubmit}
           onLiveWord={handleLiveWord}
           busy={busy}
+          pendingWord={pendingWord}
+          missedWord={missedWord}
         />
-        {/* Live voice feedback chips */}
-        {(pendingWord || missedWord) && (
-          <div className="mt-2 flex items-center gap-2 px-1">
-            {pendingWord && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 border border-white/30 text-white/80 text-xs animate-pulse">
-                <span className="h-1.5 w-1.5 rounded-full bg-white/60" />
-                "{pendingWord}"…
-              </span>
-            )}
-            {missedWord && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-white/50 text-xs line-through">
-                {missedWord}
-              </span>
-            )}
-          </div>
-        )}
       </div>
 
       <div className="flex-1 flex items-center justify-center my-6 animate-fade-up">

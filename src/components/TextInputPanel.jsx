@@ -14,7 +14,7 @@ import useVoiceInput from '../hooks/useVoiceInput.js'
  *   - clear()  : stop the mic if active, empty input, reset word tracker
  */
 const TextInputPanel = forwardRef(function TextInputPanel(
-  { initialMode = 'text', onSubmit, onLiveWord, busy = false },
+  { initialMode = 'text', onSubmit, onLiveWord, busy = false, pendingWord = '', missedWord = '' },
   ref
 ) {
   const [value, setValue] = useState('')
@@ -173,7 +173,20 @@ const TextInputPanel = forwardRef(function TextInputPanel(
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/80">
         {listening ? (
-          <span className="opacity-90">Cada palabra reconocida se traduce y reproduce al instante.</span>
+          <>
+            <span className="opacity-90">Traduciendo al instante…</span>
+            {pendingWord && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/20 border border-white/30 text-white/80 animate-pulse">
+                <span className="h-1.5 w-1.5 rounded-full bg-white/60" />
+                "{pendingWord}"…
+              </span>
+            )}
+            {missedWord && (
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-white/40 line-through">
+                {missedWord}
+              </span>
+            )}
+          </>
         ) : (
           <>
             <span className="opacity-70">Prueba:</span>
