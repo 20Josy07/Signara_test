@@ -25,7 +25,8 @@ const POSE_COUNT = 33
 const HAND_COUNT = 21
 const STABILITY_NEEDED = 3    // predicciones consecutivas iguales para confirmar
 const PREDICT_EVERY = 5       // enviar al API cada N frames (~6 veces/seg a 30fps)
-const ML_COOLDOWN_MS = 600    // cooldown entre detecciones ML (conversación fluida)
+const ML_COOLDOWN_MS = 600    // cooldown entre señas DISTINTAS
+const SAME_SIGN_COOLDOWN_MS = 2500 // cooldown para REPETIR la misma seña (evita spam al mantener)
 
 function loadScript(url) {
   return new Promise((resolve, reject) => {
@@ -99,6 +100,7 @@ export default function InterpretScreen({ onBack, onHome }) {
   const mlAvailableRef      = useRef(false)
   const apiInFlightRef      = useRef(false)
   const stabilityRef        = useRef({ count: 0, prediction: '' })
+  const lastEmittedSignRef  = useRef('')   // última seña disparada (para cooldown diferenciado)
   const sentenceClearTimer  = useRef(null)
   const handModelRef        = useRef(null)
 
@@ -383,7 +385,10 @@ export default function InterpretScreen({ onBack, onHome }) {
                   s.prediction = prediction
                 }
                 if (s.count >= STABILITY_NEEDED) {
-                  if (now - lastDetectionRef.current > ML_COOLDOWN_MS) {
+                  const isSameSign = prediction === lastEmittedSignRef.current
+                  const requiredCooldown = isSameSign ? SAME_SIGN_COOLDOWN_MS : ML_COOLDOWN_MS
+                  if (now - lastDetectionRef.current > requiredCooldown) {
+                    lastEmittedSignRef.current = prediction
                     triggerRecognition(prediction, prediction, confidence)
                     stabilityRef.current = { count: 0, prediction: '' }
                   }
@@ -545,6 +550,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     frameCountRef.current       = 0
     stabilityRef.current        = { count: 0, prediction: '' }
     lastDetectionRef.current    = 0
+    lastEmittedSignRef.current  = ''
     setRunning(true)
   }
 
@@ -563,6 +569,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     frameCountRef.current       = 0
     stabilityRef.current        = { count: 0, prediction: '' }
     lastDetectionRef.current    = 0
+    lastEmittedSignRef.current  = ''
     if (sentenceClearTimer.current) clearTimeout(sentenceClearTimer.current)
     window?.speechSynthesis?.cancel()
   }, [])

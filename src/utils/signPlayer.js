@@ -34,6 +34,10 @@ export function setAvatarApiEndpoint(url) {
   _apiEndpoint = url
 }
 
+export function getAvatarApiEndpoint() {
+  return _apiEndpoint
+}
+
 /**
  * resolveSign
  * Maps a canonical sign token to its playback descriptor.

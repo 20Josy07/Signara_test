@@ -10,6 +10,7 @@ Uso:
 
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -25,6 +26,8 @@ from core.config import (
     SEQ_LEN,
     UMBRAL_CONFIANZA,
 )
+
+ANIM_DIR = Path(__file__).parent / "animations"
 
 app = FastAPI(title="Signara ML API", version="1.0.0")
 
@@ -85,6 +88,29 @@ def health():
         "max_features": MAX_FEATURES,
         "umbral_confianza": UMBRAL_CONFIANZA,
     }
+
+
+@app.get("/animations")
+def list_animations():
+    """Devuelve la lista de tokens con animación disponible."""
+    if not ANIM_DIR.exists():
+        return {"tokens": []}
+    tokens = [p.stem for p in ANIM_DIR.glob("*.json")]
+    return {"tokens": sorted(tokens)}
+
+
+@app.get("/sign/{token}")
+def get_sign_animation(token: str):
+    """
+    Devuelve los keyframes de MediaPipe para un token de seña.
+    Formato: { token, fps, frames: [{lh, rh, pose}] }
+    """
+    token = token.upper()
+    path = ANIM_DIR / f"{token}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Animación no encontrada: {token}")
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 @app.post("/predict", response_model=PredictResponse)

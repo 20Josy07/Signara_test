@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Logo from './Logo.jsx'
 import AvatarPlayer from './AvatarPlayer.jsx'
+import AvatarSigner3D from './AvatarSigner3D.jsx'
 import TextInputPanel from './TextInputPanel.jsx'
 import SignChips from './SignChips.jsx'
 import { translateText } from '../utils/translateText.js'
@@ -10,6 +11,19 @@ import {
   getAllSignKeys,
   setCurrentAvatar
 } from '../utils/signMap.js'
+import {
+  SIGN_PLAYER_MODE,
+  getSignPlayerMode,
+  setSignPlayerMode,
+  setAvatarApiEndpoint,
+} from '../utils/signPlayer.js'
+
+// Auto-activate 3D avatar mode when the ML API URL is configured
+const ML_API_URL = import.meta.env.VITE_ML_API_URL || ''
+if (ML_API_URL) {
+  setSignPlayerMode(SIGN_PLAYER_MODE.API)
+  setAvatarApiEndpoint(ML_API_URL)
+}
 
 export default function TranslationScreen({
   initialMode = 'text',
@@ -207,13 +221,24 @@ export default function TranslationScreen({
       </div>
 
       <div className="flex-1 flex items-center justify-center my-6 animate-fade-up">
-        <AvatarPlayer
-          ref={avatarRef}
-          avatarId={avatarId}
-          onAvatarChange={handleAvatarChange}
-          onSign={setActiveSign}
-          onFinish={() => setActiveSign(null)}
-        />
+        {getSignPlayerMode() === SIGN_PLAYER_MODE.API ? (
+          <div className="w-full max-w-md" style={{ height: '58vh' }}>
+            <AvatarSigner3D
+              ref={avatarRef}
+              apiUrl={ML_API_URL}
+              onSign={setActiveSign}
+              onFinish={() => setActiveSign(null)}
+            />
+          </div>
+        ) : (
+          <AvatarPlayer
+            ref={avatarRef}
+            avatarId={avatarId}
+            onAvatarChange={handleAvatarChange}
+            onSign={setActiveSign}
+            onFinish={() => setActiveSign(null)}
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-up">
