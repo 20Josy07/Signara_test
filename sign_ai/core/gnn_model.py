@@ -64,8 +64,8 @@ A_HAT = build_adjacency()   # (42, 42) — precalculado una vez
 class GCNLayer(nn.Module):
     def __init__(self, in_features: int, out_features: int):
         super().__init__()
-        self.linear = nn.Linear(in_features, out_features, bias=False)
-        self.bn     = nn.BatchNorm1d(N_NODES)
+        self.linear = nn.Linear(in_features, out_features)
+        self.bn     = nn.BatchNorm1d(out_features)
         self.act    = nn.ReLU()
 
     def forward(self, x, A_hat):
@@ -73,10 +73,10 @@ class GCNLayer(nn.Module):
         x:     (batch, nodes, features)
         A_hat: (nodes, nodes)
         """
-        # H' = A_hat @ H @ W
         out = torch.bmm(A_hat.unsqueeze(0).expand(x.size(0), -1, -1), x)
-        out = self.linear(out)
-        out = self.bn(out)
+        out = self.linear(out)                          # (batch, nodes, out_features)
+        b, n, f = out.shape
+        out = self.bn(out.view(b * n, f)).view(b, n, f) # BN on (B*N, F)
         out = self.act(out)
         return out
 
