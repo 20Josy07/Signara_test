@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 // Vercel env var is GOOGLE_API_KEY
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
-const SIGN_KEYS = ["HOLA", "COMO_ESTAS", "GRACIAS", "POR_FAVOR", "TENGO_SED", "TE_AMO", "NECESITO_AYUDA"];
+const SIGN_KEYS = ["HOLA", "COMO_ESTAS", "GRACIAS", "POR_FAVOR", "TENGO_SED", "TE_AMO", "NECESITO_AYUDA", "SOMOS", "SIGNARA"];
 
 function localMatch(text) {
   const t = text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
