@@ -17,9 +17,12 @@ __pycache__/
 # MODELOS Y DATOS IA
 # =========================
 datasets/
-models/
 *.pkl
 *.csv
+# Ignorar modelo legacy y datos de entrenamiento, NO el modelo GNN
+sign_ai/models/signara_lstm.keras
+sign_ai/models/labels.json
+sign_ai/data/
 
 # =========================
 # SISTEMA / OS
