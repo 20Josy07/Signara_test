@@ -283,7 +283,7 @@ const AvatarSigner3D = forwardRef(function AvatarSigner3D(
   }), [processQueue])
 
   return (
-    <div className="relative w-full h-full rounded-2xl overflow-hidden bg-signara-navy/10">
+    <div className="relative w-full h-full rounded-4xl overflow-hidden bg-white border border-white/90 shadow-soft">
       <canvas
         ref={canvasRef}
         className="w-full h-full"
@@ -291,12 +291,12 @@ const AvatarSigner3D = forwardRef(function AvatarSigner3D(
       />
       {status === 'loading' && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <span className="text-xs text-white/50">Cargando animación…</span>
+          <span className="text-xs text-signara-navy/50">Cargando animación…</span>
         </div>
       )}
       {status === 'idle' && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <span className="text-xs text-white/30">Avatar 3D listo</span>
+          <span className="text-xs text-signara-navy/35">Avatar 3D listo</span>
         </div>
       )}
     </div>

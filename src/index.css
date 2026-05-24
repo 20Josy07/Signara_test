@@ -64,4 +64,160 @@ body {
   .chip-active {
     @apply bg-signara-text text-white border-transparent shadow-glow;
   }
+  .gradient-halo {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #934CFF 0%, #2E7CF8 100%);
+  }
+  .landing-hero-accent {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(
+      90deg,
+      #FFFFFF 0%,
+      #77AAF9 20%,
+      #934CFF 45%,
+      #2E7CF8 70%,
+      #B8D9FF 85%,
+      #FFFFFF 100%
+    );
+    background-size: 250% auto;
+    animation: gradient-text-flow 6s ease-in-out infinite;
+    filter: drop-shadow(0 2px 14px rgba(22, 25, 32, 0.55));
+  }
+  .btn-halo {
+    @apply inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full
+           text-palette-surface font-semibold tracking-wide
+           hover:opacity-90 active:opacity-85
+           transition-all duration-300
+           focus:outline-none focus:ring-4 focus:ring-palette-iris/30;
+    background-image: linear-gradient(135deg, #934CFF 0%, #2E7CF8 100%);
+    box-shadow: 0 8px 32px -4px rgba(147, 76, 255, 0.45);
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full
+           font-semibold text-palette-pearl
+           border border-palette-mist/40 bg-palette-surface/5
+           hover:bg-palette-surface/10 hover:border-palette-mist/60
+           transition-all duration-300
+           focus:outline-none focus:ring-4 focus:ring-palette-azure/20;
+  }
+
+  /* Landing page */
+  .landing-gradient-bg {
+    background: linear-gradient(
+      135deg,
+      #161920 0%,
+      #1a0a3e 18%,
+      #934CFF 42%,
+      #2E7CF8 68%,
+      #161920 100%
+    );
+    background-size: 300% 300%;
+    animation: gradient-flow 18s ease infinite;
+  }
+
+  .landing-grid {
+    background-image:
+      linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .landing-diagonal-lines {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 40px,
+      rgba(255,255,255,0.15) 40px,
+      rgba(255,255,255,0.15) 41px
+    );
+  }
+
+  .landing-badge {
+    @apply inline-flex items-center gap-2 rounded-full
+           border border-palette-mist/30 bg-palette-surface/10
+           px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em]
+           text-palette-mist backdrop-blur-md;
+  }
+
+  .landing-stat-chip {
+    @apply px-3.5 py-1.5 rounded-full text-xs font-medium
+           border border-white/10 bg-palette-surface/5 text-palette-pearl/80
+           backdrop-blur-sm;
+  }
+
+  .landing-hero-card {
+    @apply relative;
+  }
+
+  .landing-hero-card-glow {
+    @apply absolute -inset-1 rounded-[2rem] opacity-70 blur-md;
+    background: linear-gradient(135deg, #934CFF 0%, #2E7CF8 100%);
+  }
+
+  .landing-hero-card-inner {
+    @apply relative rounded-[2rem] p-8 md:p-9;
+    background: linear-gradient(180deg, #FFFFFF 0%, #EEEDF3 100%);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow:
+      0 24px 48px -12px rgba(22, 25, 32, 0.35),
+      0 0 0 1px rgba(147, 76, 255, 0.08);
+  }
+
+  .landing-hero-card-label {
+    @apply text-sm font-bold text-palette-ink tracking-tight;
+  }
+
+  .landing-hero-card-live {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1
+           text-[10px] font-semibold uppercase tracking-wider
+           bg-palette-azure/10 text-palette-azure border border-palette-azure/20;
+  }
+
+  .landing-hero-stat {
+    @apply rounded-xl py-3 text-center
+           bg-palette-pearl border border-palette-ink/[0.06];
+  }
+
+  .landing-hero-tag {
+    @apply px-2.5 py-1 rounded-full text-[10px] font-semibold
+           bg-palette-iris/10 text-palette-iris border border-palette-iris/15;
+  }
+
+  .landing-value-card {
+    @apply flex flex-col items-center text-center rounded-2xl
+           border border-white/10 bg-palette-surface/[0.06] backdrop-blur-xl
+           px-6 py-6 transition-all duration-300
+           hover:border-palette-iris/30 hover:bg-palette-surface/10;
+  }
+
+  .landing-section-label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.28em] text-palette-mist;
+  }
+
+  .landing-feature-card {
+    @apply relative overflow-hidden rounded-3xl
+           border border-white/10 bg-palette-surface/[0.07] backdrop-blur-2xl
+           p-8 transition-all duration-300
+           hover:-translate-y-1.5 hover:border-palette-mist/25
+           hover:shadow-2xl hover:shadow-palette-iris/15;
+  }
+
+  .landing-steps-panel {
+    @apply relative rounded-3xl border border-white/10
+           bg-palette-surface/[0.06] backdrop-blur-2xl p-10 md:p-12;
+  }
+
+  .landing-cta-banner {
+    @apply relative;
+  }
+}
+
+@keyframes gradient-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes gradient-text-flow {
+  0%, 100% { background-position: 0% center; }
+  50% { background-position: 100% center; }
 }

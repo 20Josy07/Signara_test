@@ -33,19 +33,19 @@ export default function ModeSelection({ onSelect, onBack }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl animate-fade-up">
         <ModeCard
-          title="Traducir"
-          description="Convierte texto o voz en español a lengua de señas con un avatar."
+          title="Texto/Voz a señas"
+          description="Convierte lo que escribes o hablas en lengua de señas con un avatar 3D."
           accent="from-signara-blue to-signara-navy"
           icon={<TranslateIcon />}
           tags={['Texto', 'Voz', 'Avatar']}
           onClick={() => onSelect('translate')}
         />
         <ModeCard
-          title="Interpretar"
-          description="Usa tu cámara para identificar señas y traducirlas a texto o audio."
+          title="Señas a texto/voz"
+          description="Usa tu cámara para interpretar señas y obtener texto o voz al instante."
           accent="from-signara-purple to-signara-lilac"
           icon={<CameraIcon />}
-          tags={['Cámara', 'Texto', 'Audio']}
+          tags={['Cámara', 'Texto', 'Voz']}
           onClick={() => onSelect('interpret')}
         />
       </div>

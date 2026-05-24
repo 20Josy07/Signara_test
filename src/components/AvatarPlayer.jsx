@@ -266,7 +266,7 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
 
   return (
     <div className="relative w-full">
-      <div className="relative mx-auto aspect-[4/5] max-h-[58vh] w-full max-w-md rounded-4xl overflow-hidden shadow-glow bg-gradient-to-br from-signara-blue/20 via-signara-purple/15 to-signara-lilac/25 backdrop-blur-sm">
+      <div className="relative mx-auto aspect-[4/5] max-h-[58vh] w-full max-w-md rounded-4xl overflow-hidden bg-white border border-white/90 shadow-soft">
         {/* DOUBLE-BUFFER: two stacked <video> elements that crossfade.
             Initial inline opacity 0; we drive opacity imperatively from
             preloadAndSwap() so React never re-applies stale styles. */}
