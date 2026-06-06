@@ -1,161 +1,100 @@
-*Signara*
+# Signara
 
-Conectando dos mundos que hoy no logran comunicarse.
+**Conectando dos mundos que hoy no logran comunicarse.**
 
-Signara es una web app que traduce texto o voz en español a lengua de señas, reproduciendo las señas con un avatar animado.
+Signara es una aplicación web que ayuda a traducir entre español y lengua de señas. Puedes escribir o hablar y ver las señas con un avatar, o usar la cámara para interpretar gestos y convertirlos en texto.
 
-Este repo es el MVP de hackathon: frontend completamente funcional, con integración a IA en progreso (Claude + modelo propio con MediaPipe), actualmente en fase de dataset y entrenamiento.
+---
 
-Módulo IA (nuevo)
+## ¿Qué puedes hacer con Signara?
 
-Este proyecto también incluye un backend de IA para reconocimiento de señas:
+### Traducir → señas
+Escribe una frase o dicta por voz. Signara la convierte en una secuencia de señas y las reproduce con un avatar (Alex, Anuar o Grace).
 
-Captura de mano con MediaPipe
-Entrenamiento de modelo con datasets propios
-Predicción en tiempo real de letras/palabras
-API lista para conectar con frontend (FastAPI)
+### Interpretar → texto
+Activa la cámara, haz una seña y Signara intenta reconocerla y mostrarla en pantalla. También puede leer el resultado en voz alta.
 
-Requisitos del sistema
-IMPORTANTE
+---
 
-Usar:
+## Probar la app en tu computadora
 
-Python 3.11 (OBLIGATORIO)
+Necesitas tener instalado [Node.js](https://nodejs.org/) (versión 18 o superior).
 
-❌ NO usar Python 3.12 o superior (incompatible con MediaPipe en algunos casos)
+1. Clona este repositorio y entra a la carpeta del proyecto.
+2. Instala las dependencias:
+   ```bash
+   npm install
+   ```
+3. Inicia la aplicación:
+   ```bash
+   npm run dev
+   ```
+4. Abre en el navegador la dirección que aparece en la terminal (normalmente `http://localhost:5173`).
 
-Descargar aquí:
-https://www.python.org/downloads/release/python-3119/
+Con eso ya puedes explorar la interfaz, traducir texto y probar la entrada por voz.
 
+> **Nota:** Para que la traducción use inteligencia artificial en local, necesitas un archivo `.env` con tu clave de API y ejecutar también `npm run server` en otra terminal. Si no está configurado, la app sigue funcionando con su traducción local integrada.
 
-Instalación completa (frontend + IA)
-1. Clonar o actualizar repo:
-git pull origin main
+---
 
-Si hay cambios locales y quieren limpiar todo:
+## Reconocimiento de señas con cámara (opcional)
 
-git reset --hard origin/main
-git clean -fd
+Esta parte usa un servidor de inteligencia artificial aparte. Solo hace falta si quieres probar el modo **Interpretar**.
 
-2. Crear entorno virtual (IA)
+Requisitos:
+- [Python 3.11](https://www.python.org/downloads/release/python-3119/) (usa esta versión; versiones más nuevas pueden dar problemas)
 
-py -3.11 -m venv venv
+Pasos:
 
-3. Activar entorno
+1. Crea y activa un entorno virtual:
+   ```bash
+   py -3.11 -m venv venv
+   venv\Scripts\activate
+   ```
+2. Instala las dependencias del módulo de IA:
+   ```bash
+   cd sign_ai
+   pip install -r requirements_api.txt
+   ```
+3. Inicia el servidor:
+   ```bash
+   uvicorn api:app --port 8000
+   ```
+4. Con la app web abierta, entra al modo **Interpretar**. Si el servidor está corriendo, verás el indicador **Modo IA** en verde.
 
-venv\Scripts\activate
+---
 
-4. Instalar dependencias (IA)
+## Estado del proyecto
 
-pip install -r requirements.txt
+Signara nació como MVP de hackathon. Esto es lo que ya funciona y lo que sigue en marcha:
 
-5. Instalar frontend
+| | |
+|---|---|
+| ✅ | Interfaz completa y lista para demo |
+| ✅ | Traducción de texto y voz a señas con avatar |
+| ✅ | Tres avatares para elegir |
+| 🔄 | Reconocimiento de señas con cámara (mejorando) |
+| 🔄 | Ampliación del vocabulario de señas |
 
-npm install
+---
 
+## Estructura del proyecto (resumen)
 
-
-Ejecución del proyecto
-Frontend:
-
-npm run dev
-
-http://localhost:5173
-
-IA (captura de datos)
-
-python 01_collect.py
-
-IA (API futura) //aun no
-uvicorn api:app --reload
-
-
-Estructura 
+```
 Signara/
-├── public/
-│   ├── logo.svg
-│   └── videos/
-├── src/ (Frontend React)
-│
-├── sign_ai/ (Backend IA)
-│   ├── 01_collect.py      # captura de datos
-│   ├── 02_train.py        # entrenamiento
-│   ├── 03_realtime.py     # predicción en vivo
-│   ├── core/
-│   ├── datasets/
-│   ├── api.py             # FastAPI (en desarrollo)
-│   └── requirements.txt
-│
-├── package.json
-└── README.md
+├── src/          → La aplicación web (lo que ves en el navegador)
+├── public/       → Videos de señas, imágenes y logo
+├── sign_ai/      → Servidor de reconocimiento de señas con cámara
+├── server.js     → API de traducción para desarrollo local
+└── api/          → API de traducción para despliegue en la nube
+```
 
+---
 
-Flujo del sistema
-Cámara → MediaPipe → Landmarks → Modelo IA → Letra/Seña → Frontend React
+## Objetivo
 
-Stack
-Frontend
-React 18 + Vite
-Tailwind CSS 3
-Web Speech API
-IA
-Python 3.11
-MediaPipe
-OpenCV
-Scikit-learn / TensorFlow (según modelo)
-FastAPI (backend)
+Que cualquier persona pueda comunicarse más fácil entre el mundo oral/escrito y la lengua de señas: traduciendo frases a gestos visibles y, a la inversa, entendiendo señas frente a una cámara.
 
-Estructura Frontend (original)
+---
 
-(se mantiene igual que tu versión actual)
-
-Signara/
-├── public/
-│   ├── logo.svg
-│   └── videos/
-├── src/
-│   ├── App.jsx
-│   ├── main.jsx
-│   ├── index.css
-│   ├── components/
-│   ├── hooks/
-│   └── utils/
- 
-Conexión futura con IA
-
-Frontend → API Python:
-
-fetch("http://127.0.0.1:8000/predict", {
-  method: "POST",
-  body: formData
-})
-
-Respuesta:
-
-{
-  "prediction": "A"
-}
-
-Estado actual del proyecto
-✔ Frontend completo
-✔ Voz a texto funcionando
-✔ UI lista para demo
-🟡 Dataset en construcción
-🟡 Modelo IA en entrenamiento
-🔴 Integración full en progreso
-
-
-
-
-📌Reglas del equipo
-❌ No usar Python 3.12+
-❌ No trabajar sin venv activado
-❌ Hacer git pull antes de programar
-✔ Mantener dataset organizado
-✔ Sincronizar cambios constantemente
-
-
-Objetivo del MVP
-Traducir texto/voz → señas
-Reconocer señas con cámara
-Mostrar avatar en tiempo real
+*Signara — hecho con ❤️ para acercar mundos.*
