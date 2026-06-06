@@ -1,6 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { AVATARS, normalizeSign, getSignSrc } from '../utils/signMap.js'
-import { resolveSign } from '../utils/signPlayer.js'
 
 /**
  * AvatarPlayer
@@ -93,25 +92,15 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
     const sign = queueRef.current.shift()
     refreshQueueLen()
 
-    const resolved = resolveSign(sign)
-
-    if (!resolved) {
+    const src = getSignSrc(sign)
+    if (!src) {
       setTimeout(playNext, 50)
       return
     }
 
     setPlaying(true)
     triedFallbackRef.current = false
-
-    if (resolved.type === 'animation') {
-      // Fallback directo al video local (no usa resolveSign que devuelve animation de nuevo)
-      const src = getSignSrc(sign)
-      if (src) preloadAndSwap(sign, src)
-      else setTimeout(playNext, 50)
-      return
-    }
-
-    preloadAndSwap(sign, resolved.src)
+    preloadAndSwap(sign, src)
   }
 
   /**
@@ -191,7 +180,7 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
   function queueAnimation(rawSign) {
     if (!rawSign) return
     const sign = normalizeSign(rawSign)
-    if (!getSignSrc(sign) && !resolveSign(sign)) return
+    if (!getSignSrc(sign)) return
     queueRef.current.push(sign)
     refreshQueueLen()
     if (!isPlayingRef.current) playNext()
@@ -215,7 +204,7 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
   function replaceQueue(newSigns) {
     queueRef.current = (newSigns || [])
       .map(normalizeSign)
-      .filter((s) => Boolean(getSignSrc(s)) || Boolean(resolveSign(s)))
+      .filter((s) => Boolean(getSignSrc(s)))
     refreshQueueLen()
     setPlaying(false)
     setCurrentLabel(null)
