@@ -550,14 +550,6 @@ function XIcon() {
   )
 }
 
-function GiftIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7S11 3 8.5 3 6 6 6 6s2.5 1 6 1zM12 7s1-4 3.5-4S18 6 18 6s-2.5 1-6 1z" />
-    </svg>
-  )
-}
-
 function GlobeIcon() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
