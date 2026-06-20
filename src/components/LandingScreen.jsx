@@ -55,7 +55,8 @@ export default function LandingScreen({ onStart }) {
             {/* izquierda */}
             <div className="animate-fade-up">
               <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl">
-                Comunícate <br className="hidden sm:block" />sin barreras
+                Comunícate <br className="hidden sm:block" />
+                sin <Pill color="purple">barreras</Pill>
               </h1>
               <p className="mt-5 text-xs font-bold uppercase tracking-[0.2em] text-pastel-grape">
                 Lengua de señas para todos
