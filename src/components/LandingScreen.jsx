@@ -66,8 +66,7 @@ export default function LandingScreen({ onStart }) {
                   señas con la cámara en tiempo real.
                 </p>
                 <p>
-                  Creemos que la comunicación debe ser accesible para todos, por eso Signara es libre
-                  y gratuito.
+                  Creemos que la comunicación debe ser accesible para todos.
                 </p>
               </div>
               <button
@@ -79,7 +78,7 @@ export default function LandingScreen({ onStart }) {
               </button>
               <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-semibold text-pastel-sub">
                 <span className="inline-flex items-center gap-1.5 [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:text-pastel-green-line">
-                  <CheckIcon /> 100% gratis
+                  <CheckIcon /> Tiempo real
                 </span>
                 <span className="inline-flex items-center gap-1.5 [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:text-pastel-green-line">
                   <CheckIcon /> Sin registro
@@ -205,7 +204,7 @@ export default function LandingScreen({ onStart }) {
             <h2 className="mt-5 text-3xl font-extrabold md:text-[2.6rem]">Hecho para que empieces ya</h2>
           </div>
           <div className="mt-12 grid grid-cols-2 gap-4 md:grid-cols-4">
-            <TrustBadge icon={<GiftIcon />} title="100% gratis" description="Sin costes ni planes de pago." />
+            <TrustBadge icon={<BoltIcon />} title="Tiempo real" description="Traduce e interpreta al instante." />
             <TrustBadge icon={<CheckIcon />} title="Sin registro" description="Entra y úsalo al momento." />
             <TrustBadge icon={<GlobeIcon />} title="En tu navegador" description="Nada que instalar." />
             <TrustBadge icon={<CodeIcon />} title="Código abierto" description="Transparente y comunitario." />
@@ -239,13 +238,13 @@ export default function LandingScreen({ onStart }) {
             Empieza a comunicarte sin barreras hoy
           </h2>
           <p className="mx-auto mt-5 max-w-md text-sm font-semibold text-pastel-grape md:text-base">
-            Gratis, sin registro y directo en tu navegador.
+            Sin registro y directo en tu navegador.
           </p>
           <button
             onClick={onStart}
             className="mt-9 inline-flex items-center gap-2 rounded-full bg-pastel-grape px-9 py-4 text-base font-bold text-white shadow-[0_16px_36px_-12px_rgba(126,100,201,0.85)] transition hover:scale-[1.03] hover:brightness-105 focus:outline-none focus:ring-4 focus:ring-white/50"
           >
-            Probar Signara gratis
+            Probar Signara
             <ArrowRightIcon />
           </button>
         </div>

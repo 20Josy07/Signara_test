@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AVATARS, normalizeSign, getSignSrc } from '../utils/signMap.js'
 
 /**
@@ -435,25 +436,33 @@ function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
   }, [onClose])
 
   function confirmSelection() {
     onSelect(previewId)
   }
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[200] flex items-end justify-center p-0 sm:items-center sm:p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="avatar-picker-title"
     >
-      <div className="absolute inset-0 bg-pastel-ink/45 backdrop-blur-sm" />
+      <div
+        className="absolute inset-0 bg-[#2D2A26]/75 backdrop-blur-md transition-opacity"
+        aria-hidden="true"
+      />
 
       <div
-        className="relative flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-[2rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] shadow-[0_30px_70px_-20px_rgba(45,42,38,0.6)] animate-fade-up sm:rounded-[2rem]"
+        className="relative z-10 flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-[2rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] shadow-[0_40px_90px_-20px_rgba(0,0,0,0.55)] animate-fade-up sm:rounded-[2rem]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Vista previa grande */}
@@ -571,7 +580,8 @@ function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
