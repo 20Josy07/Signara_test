@@ -253,7 +253,7 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
 
   return (
     <div className="relative w-full">
-      <div className="relative mx-auto aspect-[4/5] max-h-[58vh] w-full max-w-md rounded-4xl overflow-hidden bg-white border border-white/90 shadow-soft">
+      <div className="relative mx-auto aspect-[4/5] max-h-[58vh] w-full max-w-md overflow-hidden rounded-[1.75rem] border-2 border-pastel-ink/10 bg-white shadow-[0_16px_36px_-22px_rgba(45,42,38,0.45)]">
         {/* DOUBLE-BUFFER: two stacked <video> elements that crossfade.
             Initial inline opacity 0; we drive opacity imperatively from
             preloadAndSwap() so React never re-applies stale styles. */}
@@ -283,21 +283,19 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
 
         {/* Sign label */}
         {currentLabel && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-5 py-2 rounded-full bg-white/90 backdrop-blur text-signara-navy font-bold tracking-wide shadow-soft text-sm">
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border-2 border-pastel-purple-line bg-white/95 px-5 py-2 text-sm font-bold tracking-wide text-pastel-ink shadow-[0_8px_20px_-12px_rgba(45,42,38,0.35)] backdrop-blur">
             {normalizeSign(currentLabel).replace(/_/g, ' ')}
           </div>
         )}
 
-        {/* Avatar name pill - top center, only visible while idle so it
-            doesn't overlap the active sign label. */}
         {avatar && !currentLabel && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-white/90 backdrop-blur text-signara-navy text-xs font-bold tracking-wide shadow-soft">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 rounded-full border-2 border-pastel-ink/10 bg-white/95 px-3 py-1 text-xs font-bold tracking-wide text-pastel-ink shadow-[0_8px_20px_-12px_rgba(45,42,38,0.35)] backdrop-blur">
             {avatar.name}
           </div>
         )}
 
         {queueLen > 0 && (
-          <div className="absolute top-4 right-4 px-2.5 py-1 rounded-full bg-signara-text text-white text-[11px] font-bold shadow-soft">
+          <div className="absolute top-4 right-4 rounded-full bg-pastel-grape px-2.5 py-1 text-[11px] font-bold text-white shadow-[0_8px_20px_-6px_rgba(126,100,201,0.6)]">
             +{queueLen} en cola
           </div>
         )}
@@ -313,7 +311,7 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
       <div className="mt-5 flex items-center justify-center gap-3">
         <button
           type="button"
-          className="btn-ghost py-2 px-5 text-sm inline-flex items-center gap-2"
+          className="btn-pastel-ghost py-2 px-5 text-sm inline-flex items-center gap-2"
           onClick={() => setPickerOpen(true)}
           title="Personalizar avatar"
         >
@@ -362,8 +360,8 @@ function FallbackAvatar({ avatar, active }) {
             draggable={false}
           />
         ) : (
-          <div className={'relative h-44 w-44 rounded-full bg-gradient-to-br from-signara-blue to-signara-purple shadow-glow flex items-center justify-center ' + (active ? 'animate-float' : '')}>
-            <svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <div className={'relative flex h-44 w-44 items-center justify-center rounded-full border-2 border-pastel-purple-line bg-pastel-purple/50 shadow-[0_16px_36px_-22px_rgba(45,42,38,0.4)] ' + (active ? 'animate-float' : '')}>
+            <svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="#7E64C9" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 11V5a1.5 1.5 0 1 1 3 0v5" />
               <path d="M12 10V4a1.5 1.5 0 1 1 3 0v6" />
               <path d="M15 10V6a1.5 1.5 0 1 1 3 0v6" />
@@ -386,20 +384,20 @@ function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       onClick={onClose}
     >
-      <div className="absolute inset-0 bg-signara-navy/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-pastel-ink/40 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-lg rounded-3xl bg-white shadow-glow p-6 sm:p-8 animate-fade-up"
+        className="relative w-full max-w-lg animate-fade-up rounded-[1.75rem] border-2 border-pastel-ink/10 bg-white p-6 shadow-[0_30px_70px_-40px_rgba(45,42,38,0.55)] sm:p-8"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-signara-purple">Personalizar</p>
-            <h3 className="mt-1 text-2xl font-extrabold text-signara-navy">Elige tu avatar</h3>
-            <p className="mt-1 text-sm text-signara-navy/60">Cambia quien interpreta las senas en pantalla.</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-pastel-grape">Personalizar</p>
+            <h3 className="mt-1 text-2xl font-extrabold text-pastel-ink">Elige tu avatar</h3>
+            <p className="mt-1 text-sm text-pastel-sub">Cambia quién interpreta las señas en pantalla.</p>
           </div>
           <button
             onClick={onClose}
-            className="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-full text-signara-navy/60 hover:bg-signara-navy/10 hover:text-signara-navy transition"
+            className="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-full text-pastel-sub transition hover:bg-pastel-purple/30 hover:text-pastel-ink"
             title="Cerrar"
             aria-label="Cerrar"
           >
@@ -417,13 +415,13 @@ function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
                 key={a.id}
                 onClick={() => onSelect(a.id)}
                 className={
-                  'group flex flex-col items-center rounded-2xl p-3 sm:p-4 transition focus:outline-none focus:ring-4 focus:ring-signara-purple/20 ' +
+                  'group flex flex-col items-center rounded-2xl p-3 transition focus:outline-none focus:ring-4 focus:ring-pastel-purple/20 sm:p-4 ' +
                   (selected
-                    ? 'bg-signara-lilac/30 ring-2 ring-signara-purple shadow-soft'
-                    : 'bg-signara-lilac/10 hover:bg-signara-lilac/20 ring-1 ring-signara-lilac/40')
+                    ? 'border-2 border-pastel-purple-line bg-pastel-purple/40 shadow-[0_8px_20px_-12px_rgba(45,42,38,0.35)]'
+                    : 'border-2 border-pastel-ink/10 bg-pastel-cream hover:border-pastel-purple-line hover:bg-pastel-purple/20')
                 }
               >
-                <span className="aspect-square w-full rounded-xl overflow-hidden bg-gradient-to-br from-signara-blue/10 via-signara-purple/10 to-signara-lilac/20 flex items-center justify-center">
+                <span className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border-2 border-pastel-ink/10 bg-pastel-blue/30">
                   <img
                     src={a.image}
                     alt={a.name}
@@ -431,11 +429,11 @@ function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
                     draggable={false}
                   />
                 </span>
-                <span className={'mt-3 text-sm font-bold ' + (selected ? 'text-signara-purple' : 'text-signara-navy')}>
+                <span className={'mt-3 text-sm font-bold ' + (selected ? 'text-pastel-grape' : 'text-pastel-ink')}>
                   {a.name}
                 </span>
                 {selected && (
-                  <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-signara-purple">
+                  <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-pastel-grape">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M20 6 9 17l-5-5" />
                     </svg>
@@ -450,7 +448,7 @@ function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
         <div className="mt-6 flex items-center justify-end">
           <button
             onClick={onClose}
-            className="btn-primary py-2.5 px-5 text-sm"
+            className="btn-pastel py-2.5 px-5 text-sm"
           >
             Listo
           </button>

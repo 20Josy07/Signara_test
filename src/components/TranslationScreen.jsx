@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import Logo from './Logo.jsx'
+import { ResetButton, SectionLabel } from './AppShell.jsx'
 import AvatarPlayer from './AvatarPlayer.jsx'
 import TextInputPanel from './TextInputPanel.jsx'
 import SignChips from './SignChips.jsx'
 import { translateText } from '../utils/translateText.js'
 import { textToSignTokens } from '../utils/textNormalizer.js'
 import {
+  AVATARS,
   getCurrentAvatar,
   getAllSignKeys,
   setCurrentAvatar
@@ -24,14 +25,16 @@ export default function TranslationScreen({
   const [busy, setBusy] = useState(false)
   const [liveMode, setLiveMode] = useState(false)
   const [avatarId, setAvatarId] = useState(initialAvatarId || getCurrentAvatar().id)
-  const [pendingWord, setPendingWord] = useState('')   // word waiting to form a compound
-  const [missedWord, setMissedWord] = useState('')    // word that had no sign match
+  const [pendingWord, setPendingWord] = useState('')
+  const [missedWord, setMissedWord] = useState('')
 
   const avatarRef = useRef(null)
   const inputRef = useRef(null)
   const liveQueuedRef = useRef([])
   const pendingWordRef = useRef('')
   const missedTimerRef = useRef(null)
+
+  const avatar = AVATARS.find((a) => a.id === avatarId) || AVATARS[0]
 
   useEffect(() => {
     if (initialAvatarId && initialAvatarId !== avatarId) {
@@ -80,24 +83,22 @@ export default function TranslationScreen({
     if (onAvatarChange) onAvatarChange(id)
   }, [onAvatarChange])
 
-  // --- TYPED path (Con el SEGURO de minúsculas) ---
   const handleSubmit = useCallback(async (text) => {
-    setBusy(true);
-    setOriginalText(text); // Guardamos el texto tal cual lo puso el usuario
+    setBusy(true)
+    setOriginalText(text)
     try {
-      const result = await translateText(text);
-      setSigns(result);
+      const result = await translateText(text)
+      setSigns(result)
       if (avatarRef.current) {
-        avatarRef.current.replace(result);
+        avatarRef.current.replace(result)
       }
     } catch (e) {
-      console.error(e);
+      console.error(e)
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
   }, [])
 
-  // --- LIVE VOICE path ---
   const handleLiveWord = useCallback((rawWord) => {
     const cleaned = String(rawWord || '').trim()
     if (!cleaned) return
@@ -115,7 +116,6 @@ export default function TranslationScreen({
       }
     }
 
-    // Try compound (pending word + new word) first
     if (pendingWordRef.current) {
       const compound = pendingWordRef.current + ' ' + cleaned
       const tokens = textToSignTokens(compound, signKeys)
@@ -127,8 +127,6 @@ export default function TranslationScreen({
       }
     }
 
-    // Try single word with full normalization + fuzzy matching
-    // "holaaaa" → dedup → "hola" → fuzzy → "HOLA"
     const tokens = textToSignTokens(cleaned, signKeys)
     if (tokens.length > 0) {
       tokens.forEach(queueSign)
@@ -137,12 +135,10 @@ export default function TranslationScreen({
       return
     }
 
-    // No match — show briefly that the word wasn't found
     pendingWordRef.current = cleaned
     setPendingWord(cleaned)
     if (missedTimerRef.current) clearTimeout(missedTimerRef.current)
     missedTimerRef.current = setTimeout(() => {
-      // Word still unmatched after next word arrives — mark as missed
       if (pendingWordRef.current === cleaned) {
         setMissedWord(cleaned)
         pendingWordRef.current = ''
@@ -152,9 +148,6 @@ export default function TranslationScreen({
     }, 1500)
   }, [])
 
-  // Called when the browser closes the speech session.
-  // We no longer call translateText here — it adds ~1-2s lag that breaks fluency.
-  // Live word-by-word processing already queued everything correctly.
   const handleVoiceFinal = useCallback((_text) => {
     liveQueuedRef.current = []
     pendingWordRef.current = ''
@@ -173,89 +166,248 @@ export default function TranslationScreen({
     }
   }
 
-  return (
-    <section className="min-h-screen flex flex-col px-4 sm:px-6 py-6 max-w-6xl mx-auto">
-      <header className="flex items-center justify-between mb-6">
-        <button onClick={onBack} className="inline-flex items-center gap-2 text-white/85 hover:text-white text-sm font-medium">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-          Cambiar modo
-        </button>
+  const displaySigns = signs.map((s) => s.replace('.mp4', '').replace(/_/g, ' ').toUpperCase())
+  const progressPct = signs.length > 0 && activeIndex >= 0
+    ? Math.round(((activeIndex + 1) / signs.length) * 100)
+    : signs.length > 0 ? 100 : 0
 
-        <div className="flex items-center gap-2">
-          <ResetButton onClick={handleReset} />
-          <button onClick={onHome} className="flex items-center gap-2 group" title="Inicio">
-            <span className="hidden sm:block text-xl font-extrabold gradient-text bg-white px-3 py-1 rounded-full shadow-soft">Signara</span>
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/95 shadow-soft group-hover:shadow-glow transition">
-              <Logo size={28} />
-            </span>
+  return (
+    <div className="landing-page-bg relative min-h-screen font-display text-pastel-ink">
+      <header className="sticky top-0 z-50 border-b border-pastel-ink/10 bg-pastel-cream/85 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6 md:px-8">
+          <button
+            onClick={onBack}
+            className="inline-flex items-center gap-2 rounded-full border-2 border-pastel-ink/15 bg-white px-4 py-2 text-sm font-bold text-pastel-ink transition hover:border-pastel-purple-line hover:bg-pastel-purple/30 focus:outline-none focus:ring-4 focus:ring-pastel-purple"
+          >
+            <BackIcon />
+            <span className="hidden sm:inline">Cambiar modo</span>
           </button>
+
+          <button
+            onClick={onHome}
+            className="text-xl font-extrabold tracking-tight text-pastel-grape transition hover:opacity-80 sm:text-2xl"
+          >
+            Signara
+          </button>
+
+          <ResetButton onClick={handleReset} />
         </div>
       </header>
 
-      <div className="animate-fade-up">
-        <TextInputPanel
-          ref={inputRef}
-          initialMode={initialMode}
-          onSubmit={handlePanelSubmit}
-          onLiveWord={handleLiveWord}
-          busy={busy}
-          pendingWord={pendingWord}
-          missedWord={missedWord}
-        />
-      </div>
+      <section className="px-4 pb-12 pt-5 sm:px-6 md:pt-7">
+        <div className="mx-auto max-w-6xl">
+          <div className="rounded-[2.5rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] px-5 py-7 shadow-[0_30px_70px_-40px_rgba(45,42,38,0.55)] sm:px-8 sm:py-9 md:px-10">
+            <div className="flex flex-col gap-4 border-b-2 border-pastel-ink/10 pb-7 animate-fade-up lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <SectionLabel color="green">Traducir</SectionLabel>
+                <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
+                  De palabras a{' '}
+                  <span className="inline-block rounded-xl border-2 border-pastel-green-line bg-pastel-green px-2.5 py-0.5 shadow-[0_8px_18px_-8px_rgba(45,42,38,0.35)]">
+                    señas
+                  </span>
+                </h1>
+              </div>
 
-      <div className="flex-1 flex items-center justify-center my-6 animate-fade-up">
-        <div className="w-full max-w-md overflow-hidden">
-          <AvatarPlayer
-            ref={avatarRef}
-            avatarId={avatarId}
-            onAvatarChange={handleAvatarChange}
-            onSign={setActiveSign}
-            onFinish={() => setActiveSign(null)}
-          />
-        </div>
-      </div>
+              <div className="flex flex-wrap gap-2">
+                {liveMode && (
+                  <StatusPill variant="live">
+                    <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                    Voz activa
+                  </StatusPill>
+                )}
+                {busy && <StatusPill variant="busy">Procesando…</StatusPill>}
+                {signs.length > 0 && (
+                  <StatusPill variant="count">
+                    {signs.length} {signs.length === 1 ? 'seña' : 'señas'}
+                  </StatusPill>
+                )}
+                <StatusPill variant="avatar">🧑 {avatar.name}</StatusPill>
+              </div>
+            </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-up">
-        <div className="glass-card p-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-signara-purple">Texto original</p>
-          <p className="mt-2 text-signara-navy text-lg leading-relaxed min-h-[2.5rem]">
-            {originalText ? originalText : <span className="italic text-signara-navy/40">Aun no has traducido nada.</span>}
-          </p>
-        </div>
-        <div className="glass-card p-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-signara-purple">Señas traducidas</p>
-          <div className="mt-3">
-            {/* Renderizado visual limpio para el usuario final */}
-            <SignChips 
-              signs={signs.map(s => s.replace('.mp4', '').replace(/_/g, ' ').toUpperCase())} 
-              activeIndex={activeIndex} 
-            />
+            <div className="mt-7 grid grid-cols-1 gap-6 animate-fade-up lg:grid-cols-12 lg:gap-8">
+              <div className="flex flex-col gap-5 lg:col-span-5">
+                <TextInputPanel
+                  ref={inputRef}
+                  initialMode={initialMode}
+                  onSubmit={handlePanelSubmit}
+                  onLiveWord={handleLiveWord}
+                  busy={busy}
+                  pendingWord={pendingWord}
+                  missedWord={missedWord}
+                />
+
+                <OutputCard
+                  color="neutral"
+                  icon={<TextIcon />}
+                  title="Lo que dijiste"
+                  emptyIcon="💬"
+                  empty="Tu texto aparecerá aquí."
+                  hasContent={!!originalText}
+                >
+                  <p className="text-base font-bold leading-relaxed text-pastel-ink sm:text-lg">
+                    "{originalText}"
+                  </p>
+                </OutputCard>
+
+                <OutputCard
+                  color="green"
+                  icon={<SignIcon />}
+                  title="Secuencia de señas"
+                  emptyIcon="🤟"
+                  empty="Las señas saldrán aquí en orden."
+                  hasContent={signs.length > 0}
+                >
+                  <SignChips signs={displaySigns} activeIndex={activeIndex} />
+                </OutputCard>
+              </div>
+
+              <div className="lg:col-span-7">
+                <div
+                  className={
+                    'relative flex h-full flex-col overflow-hidden rounded-[2rem] border-[3px] p-5 shadow-[0_24px_50px_-28px_rgba(148,208,142,0.7)] sm:p-7 ' +
+                    (activeSign
+                      ? 'border-pastel-grape bg-gradient-to-br from-pastel-green via-pastel-green to-pastel-purple/60'
+                      : 'border-pastel-green-line bg-pastel-green')
+                  }
+                >
+                  {activeSign && (
+                    <div className="pointer-events-none absolute inset-0 rounded-[1.85rem] ring-4 ring-pastel-grape/25 ring-offset-2 ring-offset-transparent animate-pulse" />
+                  )}
+
+                  <div className="relative mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-ink/70">
+                        👀 Mira aquí
+                      </p>
+                      <p className="mt-1 text-xl font-extrabold text-pastel-ink sm:text-2xl">
+                        {activeSign ? (
+                          formatSign(activeSign)
+                        ) : signs.length > 0 ? (
+                          'Preparando la siguiente seña…'
+                        ) : (
+                          'El avatar te espera'
+                        )}
+                      </p>
+                    </div>
+
+                    {signs.length > 0 && (
+                      <div className="shrink-0 rounded-2xl border-2 border-pastel-ink/10 bg-white/90 px-4 py-2 text-center">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-pastel-sub">Progreso</p>
+                        <p className="text-2xl font-extrabold text-pastel-grape">
+                          {activeIndex >= 0 ? activeIndex + 1 : '—'}
+                          <span className="text-base text-pastel-sub"> / {signs.length}</span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {signs.length > 0 && (
+                    <div className="relative mb-4 h-2.5 overflow-hidden rounded-full border border-pastel-ink/10 bg-white/60">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-pastel-grape to-pastel-green-line transition-all duration-500 ease-out"
+                        style={{ width: `${progressPct}%` }}
+                      />
+                    </div>
+                  )}
+
+                  <div className="relative flex flex-1 items-center justify-center rounded-[1.5rem] border-2 border-white/60 bg-[#FAF6EC]/90 p-4 shadow-inner sm:p-6">
+                    <div className="w-full max-w-sm">
+                      <AvatarPlayer
+                        ref={avatarRef}
+                        avatarId={avatarId}
+                        onAvatarChange={handleAvatarChange}
+                        onSign={setActiveSign}
+                        onFinish={() => setActiveSign(null)}
+                      />
+                    </div>
+                  </div>
+
+                  {!signs.length && !originalText && (
+                    <div className="relative mt-4 rounded-2xl border-2 border-dashed border-pastel-ink/15 bg-white/50 px-4 py-3 text-center">
+                      <p className="text-sm font-bold text-pastel-ink">
+                        ↑ Escribe arriba o elige un ejemplo para empezar
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <footer className="mt-6 text-center text-xs text-white/60">
-        Traducción en tiempo real · voz o texto a lengua de señas
+      <footer className="border-t border-pastel-ink/10 px-6 py-5 text-center">
+        <p className="text-xs text-pastel-sub">Traducción en tiempo real · voz o texto a lengua de señas</p>
       </footer>
-    </section>
+    </div>
   )
 }
 
-function ResetButton({ onClick }) {
+function formatSign(sign) {
+  return sign.replace('.mp4', '').replace(/_/g, ' ').toUpperCase()
+}
+
+function StatusPill({ variant, children }) {
+  const styles = {
+    live: 'border-pastel-grape bg-pastel-grape text-white shadow-[0_6px_16px_-6px_rgba(126,100,201,0.6)]',
+    busy: 'border-pastel-purple-line bg-pastel-purple text-pastel-grape',
+    count: 'border-pastel-green-line bg-pastel-green text-pastel-ink',
+    avatar: 'border-pastel-ink/15 bg-white text-pastel-ink',
+  }
   return (
-    <button
-      onClick={onClick}
-      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-white/40"
-      title="Reiniciar todo"
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-        <path d="M3 3v5h5" />
-      </svg>
-      LIMPIAR
-    </button>
+    <span className={'inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-xs font-bold ' + styles[variant]}>
+      {children}
+    </span>
+  )
+}
+
+function OutputCard({ color, icon, title, empty, emptyIcon, hasContent, children }) {
+  const border = color === 'green'
+    ? 'border-pastel-green-line bg-white'
+    : 'border-pastel-ink/10 bg-white'
+
+  return (
+    <div className={'rounded-[1.5rem] border-2 p-4 shadow-[0_14px_30px_-24px_rgba(45,42,38,0.35)] sm:p-5 ' + border}>
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-pastel-ink/10 bg-pastel-cream text-pastel-ink [&>svg]:h-4 [&>svg]:w-4">
+          {icon}
+        </span>
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">{title}</p>
+      </div>
+      <div className="mt-3 min-h-[2.5rem]">
+        {hasContent ? children : (
+          <div className="flex flex-col items-center rounded-xl border-2 border-dashed border-pastel-ink/10 bg-pastel-cream/50 px-4 py-5 text-center">
+            <span className="text-3xl opacity-60">{emptyIcon}</span>
+            <p className="mt-2 text-sm font-semibold text-pastel-sub">{empty}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function BackIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 12H5M12 19l-7-7 7-7" />
+    </svg>
+  )
+}
+
+function TextIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7h16M4 12h10M4 17h14" />
+    </svg>
+  )
+}
+
+function SignIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 5h7M9 3v2c0 4-2.5 7-5 8M5 9c0 2.5 2.5 4.5 5 5.5" />
+      <path d="M14 20l3.5-9 3.5 9M15.2 17h4.6" />
+    </svg>
   )
 }
