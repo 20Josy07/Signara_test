@@ -308,18 +308,31 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
         )}
       </div>
 
-      <div className="mt-5 flex items-center justify-center gap-3">
+      <div className="mt-5">
         <button
           type="button"
-          className="btn-pastel-ghost py-2 px-5 text-sm inline-flex items-center gap-2"
           onClick={() => setPickerOpen(true)}
-          title="Personalizar avatar"
+          className="group flex w-full items-center gap-3 rounded-2xl border-[3px] border-pastel-green-line bg-pastel-green/50 px-4 py-3 text-left shadow-[0_10px_24px_-14px_rgba(45,42,38,0.3)] transition hover:border-pastel-grape hover:bg-pastel-green focus:outline-none focus:ring-4 focus:ring-pastel-purple/30 sm:px-5 sm:py-3.5"
+          title="Elegir intérprete"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="8" r="4" />
-            <path d="M4 21v-1a8 8 0 0 1 16 0v1" />
-          </svg>
-          Personalizar
+          <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-white bg-white shadow-sm">
+            <img
+              src={avatar.image}
+              alt={avatar.name}
+              className="h-full w-full object-contain p-1 transition group-hover:scale-105"
+              draggable={false}
+            />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[10px] font-bold uppercase tracking-[0.18em] text-pastel-grape">
+              Tu intérprete
+            </span>
+            <span className="block truncate text-lg font-extrabold text-pastel-ink">{avatar.name}</span>
+            <span className="block text-xs font-semibold text-pastel-sub">Toca para cambiar de avatar</span>
+          </span>
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-pastel-ink/10 bg-white text-pastel-grape transition group-hover:border-pastel-purple-line group-hover:bg-pastel-purple">
+            <ChevronIcon />
+          </span>
         </button>
       </div>
 
@@ -375,85 +388,221 @@ function FallbackAvatar({ avatar, active }) {
 }
 
 /**
- * AvatarPickerModal - lightweight modal listing the available avatars.
- * Tapping one selects it and closes the modal.
+ * AvatarPickerModal — elige quién interpreta las señas.
  */
+const AVATAR_META = {
+  alex: {
+    tag: 'Principal',
+    color: 'purple',
+    desc: 'Equilibrado y versátil. Ideal para empezar.',
+  },
+  anuar: {
+    tag: 'Masculino',
+    color: 'blue',
+    desc: 'Intérprete con apariencia y gestos masculinos.',
+  },
+  grace: {
+    tag: 'Femenino',
+    color: 'green',
+    desc: 'Intérprete con apariencia y gestos femeninos.',
+  },
+}
+
+const AVATAR_CARD_STYLES = {
+  purple: {
+    card: 'border-pastel-purple-line bg-pastel-purple/40',
+    tag: 'border-pastel-purple-line bg-white',
+    ring: 'ring-pastel-grape',
+  },
+  blue: {
+    card: 'border-pastel-blue-line bg-pastel-blue/40',
+    tag: 'border-pastel-blue-line bg-white',
+    ring: 'ring-pastel-blue-line',
+  },
+  green: {
+    card: 'border-pastel-green-line bg-pastel-green/40',
+    tag: 'border-pastel-green-line bg-white',
+    ring: 'ring-pastel-green-line',
+  },
+}
+
 function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
+  const [previewId, setPreviewId] = useState(selectedId)
+  const preview = avatars.find((a) => a.id === previewId) || avatars[0]
+  const meta = AVATAR_META[previewId] || AVATAR_META.alex
+  const styles = AVATAR_CARD_STYLES[meta.color] || AVATAR_CARD_STYLES.purple
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  function confirmSelection() {
+    onSelect(previewId)
+  }
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="avatar-picker-title"
     >
-      <div className="absolute inset-0 bg-pastel-ink/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-pastel-ink/45 backdrop-blur-sm" />
+
       <div
-        className="relative w-full max-w-lg animate-fade-up rounded-[1.75rem] border-2 border-pastel-ink/10 bg-white p-6 shadow-[0_30px_70px_-40px_rgba(45,42,38,0.55)] sm:p-8"
+        className="relative flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-[2rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] shadow-[0_30px_70px_-20px_rgba(45,42,38,0.6)] animate-fade-up sm:rounded-[2rem]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-pastel-grape">Personalizar</p>
-            <h3 className="mt-1 text-2xl font-extrabold text-pastel-ink">Elige tu avatar</h3>
-            <p className="mt-1 text-sm text-pastel-sub">Cambia quién interpreta las señas en pantalla.</p>
+        {/* Vista previa grande */}
+        <div className={'border-b-2 border-pastel-ink/10 px-5 py-6 sm:px-8 ' + styles.card}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">
+                Personalizar
+              </p>
+              <h3 id="avatar-picker-title" className="mt-1 text-2xl font-extrabold text-pastel-ink sm:text-3xl">
+                Elige tu intérprete
+              </h3>
+            </div>
+            <button
+              onClick={onClose}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border-2 border-pastel-ink/10 bg-white text-pastel-sub transition hover:border-pastel-purple-line hover:text-pastel-ink"
+              aria-label="Cerrar"
+            >
+              <CloseIcon />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-full text-pastel-sub transition hover:bg-pastel-purple/30 hover:text-pastel-ink"
-            title="Cerrar"
-            aria-label="Cerrar"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
+
+          <div className="mt-5 flex items-center gap-4 rounded-2xl border-2 border-white/70 bg-white/80 p-4 shadow-sm">
+            <span className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-pastel-ink/10 bg-white sm:h-28 sm:w-28">
+              <img
+                src={preview.image}
+                alt={preview.name}
+                className="h-full w-full object-contain p-2"
+                draggable={false}
+              />
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className={'inline-block rounded-full border-2 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ' + styles.tag}>
+                {meta.tag}
+              </span>
+              <p className="mt-2 text-2xl font-extrabold text-pastel-ink">{preview.name}</p>
+              <p className="mt-1 text-sm font-semibold leading-snug text-pastel-sub">{meta.desc}</p>
+            </div>
+          </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-3 gap-3 sm:gap-4">
-          {avatars.map((a) => {
-            const selected = a.id === selectedId
-            return (
-              <button
-                key={a.id}
-                onClick={() => onSelect(a.id)}
-                className={
-                  'group flex flex-col items-center rounded-2xl p-3 transition focus:outline-none focus:ring-4 focus:ring-pastel-purple/20 sm:p-4 ' +
-                  (selected
-                    ? 'border-2 border-pastel-purple-line bg-pastel-purple/40 shadow-[0_8px_20px_-12px_rgba(45,42,38,0.35)]'
-                    : 'border-2 border-pastel-ink/10 bg-pastel-cream hover:border-pastel-purple-line hover:bg-pastel-purple/20')
-                }
-              >
-                <span className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border-2 border-pastel-ink/10 bg-pastel-blue/30">
-                  <img
-                    src={a.image}
-                    alt={a.name}
-                    className="h-full w-full object-contain"
-                    draggable={false}
-                  />
-                </span>
-                <span className={'mt-3 text-sm font-bold ' + (selected ? 'text-pastel-grape' : 'text-pastel-ink')}>
-                  {a.name}
-                </span>
-                {selected && (
-                  <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-pastel-grape">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 6 9 17l-5-5" />
-                    </svg>
-                    Activo
+        {/* Lista de avatares */}
+        <div className="overflow-y-auto px-5 py-5 sm:px-8">
+          <p className="mb-3 text-xs font-extrabold uppercase tracking-wider text-pastel-grape">
+            Todos los intérpretes
+          </p>
+          <div className="space-y-3">
+            {avatars.map((a) => {
+              const m = AVATAR_META[a.id] || AVATAR_META.alex
+              const s = AVATAR_CARD_STYLES[m.color] || AVATAR_CARD_STYLES.purple
+              const isPreview = a.id === previewId
+              const isActive = a.id === selectedId
+
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => setPreviewId(a.id)}
+                  className={
+                    'flex w-full items-center gap-3 rounded-2xl border-[3px] p-3 text-left transition focus:outline-none sm:gap-4 sm:p-4 ' +
+                    (isPreview
+                      ? s.card + ' shadow-[0_12px_28px_-14px_rgba(45,42,38,0.35)] ring-4 ring-offset-2 ' + s.ring
+                      : 'border-pastel-ink/10 bg-white hover:border-pastel-purple-line hover:bg-pastel-purple/20')
+                  }
+                >
+                  <span className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-pastel-ink/10 bg-white sm:h-20 sm:w-20">
+                    <img src={a.image} alt={a.name} className="h-full w-full object-contain p-1.5" draggable={false} />
+                    {isActive && (
+                      <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-pastel-grape text-white shadow-md">
+                        <CheckIcon />
+                      </span>
+                    )}
                   </span>
-                )}
-              </button>
-            )
-          })}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="text-base font-extrabold text-pastel-ink sm:text-lg">{a.name}</span>
+                      <span className={'rounded-full border px-2 py-0.5 text-[10px] font-bold ' + s.tag}>{m.tag}</span>
+                    </span>
+                    <span className="mt-0.5 block text-xs font-semibold text-pastel-sub sm:text-sm">{m.desc}</span>
+                  </span>
+                  {isPreview && (
+                    <span className="hidden shrink-0 text-xs font-extrabold text-pastel-grape sm:block">
+                      Vista previa
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-end">
+        {/* Acciones */}
+        <div className="flex gap-3 border-t-2 border-pastel-ink/10 bg-white/60 px-5 py-4 sm:px-8">
           <button
+            type="button"
             onClick={onClose}
-            className="btn-pastel py-2.5 px-5 text-sm"
+            className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-pastel-ink/15 bg-white text-sm font-bold text-pastel-sub transition hover:text-pastel-ink sm:flex-none sm:px-5"
           >
-            Listo
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={confirmSelection}
+            disabled={previewId === selectedId}
+            className="inline-flex h-11 flex-[2] items-center justify-center gap-2 rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white shadow-[0_8px_20px_-6px_rgba(126,100,201,0.6)] transition hover:brightness-110 disabled:cursor-default disabled:opacity-50 sm:flex-1"
+          >
+            {previewId === selectedId ? (
+              'Ya está activo'
+            ) : (
+              <>
+                Usar a {preview.name}
+                <ArrowIcon />
+              </>
+            )}
           </button>
         </div>
       </div>
     </div>
+  )
+}
+
+function ChevronIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  )
+}
+
+function ArrowIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14M13 5l7 7-7 7" />
+    </svg>
   )
 }

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import AppShell, { ResetButton, SectionLabel } from './AppShell.jsx'
-import HandModel3D from './HandModel3D.jsx'
+import { ResetButton, SectionLabel } from './AppShell.jsx'
 
 const MEDIAPIPE_HOLISTIC_VER = '0.5.1675471629'
 const MEDIAPIPE_CAM_VER      = '0.3.1675466862'
@@ -107,7 +106,6 @@ export default function InterpretScreen({ onBack, onHome }) {
   const canvasRef    = useRef(null)
   const holisticRef  = useRef(null)
   const cameraRef    = useRef(null)
-  const handModelRef = useRef(null)
   const runningRef   = useRef(false)
   const audioRef     = useRef(true)
 
@@ -285,12 +283,6 @@ export default function InterpretScreen({ onBack, onHome }) {
     }
 
     ctx.restore()
-
-    // Actualizar modelo 3D
-    handModelRef.current?.update(
-      results.leftHandLandmarks  ?? null,
-      results.rightHandLandmarks ?? null
-    )
 
     setHandVisible(hasHands)
 
@@ -470,226 +462,369 @@ export default function InterpretScreen({ onBack, onHome }) {
     return 'Haz la seña'
   })()
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  const mlStatusBadge = (
-    <button
-      onClick={!mlMode && !mlConnecting ? retryMlConnection : undefined}
-      className={
-        'flex items-center gap-2 rounded-full border-2 border-pastel-ink/15 bg-white px-3 py-1.5 text-xs font-bold ' +
-        (!mlMode && !mlConnecting ? 'cursor-pointer transition hover:border-pastel-purple-line' : 'cursor-default')
-      }
-      title={!mlMode && !mlConnecting ? 'Reintentar conexión con IA' : undefined}
-    >
-      <span className={`inline-block h-2 w-2 rounded-full ${
-        mlConnecting ? 'bg-pastel-yellow-line animate-pulse' :
-        mlMode       ? 'bg-pastel-green-line animate-pulse'   : 'bg-pastel-sub/40'
-      }`} />
-      <span className="text-pastel-sub">
-        {mlConnecting ? 'Conectando…' : mlMode ? 'Modo IA' : 'Sin conexión'}
-      </span>
-    </button>
-  )
+  const bufferProgress = Math.min(100, (bufferLen / MIN_FRAMES) * 100)
+  const confPct = latest ? Math.round((latest.confidence || 0) * 100) : 0
 
   return (
-    <AppShell
-      onBack={onBack}
-      backLabel="Cambiar modo"
-      onHome={onHome}
-      headerRight={
-        <>
-          {mlStatusBadge}
+    <div className="landing-page-bg relative min-h-screen font-display text-pastel-ink">
+      <header className="sticky top-0 z-50 border-b border-pastel-ink/10 bg-pastel-cream/85 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:px-6 md:px-8">
+          <button
+            onClick={onBack}
+            className="inline-flex items-center gap-2 rounded-full border-2 border-pastel-ink/15 bg-white px-4 py-2 text-sm font-bold text-pastel-ink transition hover:border-pastel-purple-line hover:bg-pastel-purple/30 focus:outline-none focus:ring-4 focus:ring-pastel-purple"
+          >
+            <BackIcon />
+            <span className="hidden sm:inline">Cambiar modo</span>
+          </button>
+
+          <button
+            onClick={onHome}
+            className="text-xl font-extrabold tracking-tight text-pastel-grape transition hover:opacity-80 sm:text-2xl"
+          >
+            Signara
+          </button>
+
           <ResetButton onClick={handleReset} />
-        </>
+        </div>
+      </header>
+
+      <section className="px-4 pb-12 pt-5 sm:px-6 md:pt-7">
+        <div className="mx-auto max-w-6xl">
+          <div className="rounded-[2.5rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] px-5 py-7 shadow-[0_30px_70px_-40px_rgba(45,42,38,0.55)] sm:px-8 sm:py-9 md:px-10">
+            {/* Cabecera */}
+            <div className="flex flex-col gap-4 border-b-2 border-pastel-ink/10 pb-7 animate-fade-up lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <SectionLabel color="blue">Interpretar</SectionLabel>
+                <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
+                  De señas a{' '}
+                  <span className="inline-block rounded-xl border-2 border-pastel-blue-line bg-pastel-blue px-2.5 py-0.5 shadow-[0_8px_18px_-8px_rgba(45,42,38,0.35)]">
+                    texto
+                  </span>
+                </h1>
+                <p className="mt-3 max-w-lg text-sm font-semibold text-pastel-sub sm:text-base">
+                  Muestra tus manos a la cámara y Signara las convertirá en palabras.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <MlStatusPill
+                  mlMode={mlMode}
+                  mlConnecting={mlConnecting}
+                  onRetry={!mlMode && !mlConnecting ? retryMlConnection : undefined}
+                />
+                {running && (
+                  <StatusPill variant="live">
+                    <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                    Detectando
+                  </StatusPill>
+                )}
+                {history.length > 0 && (
+                  <StatusPill variant="count">{history.length} detectadas</StatusPill>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-7 grid grid-cols-1 gap-6 animate-fade-up lg:grid-cols-12 lg:gap-8">
+              {/* Cámara + controles */}
+              <div className="flex flex-col gap-5 lg:col-span-7">
+                <div
+                  className={
+                    'relative overflow-hidden rounded-[2rem] border-[3px] shadow-[0_24px_50px_-28px_rgba(147,190,240,0.75)] ' +
+                    (running && handVisible
+                      ? 'border-pastel-grape bg-gradient-to-br from-pastel-blue via-pastel-blue to-pastel-purple/40'
+                      : 'border-pastel-blue-line bg-pastel-blue')
+                  }
+                >
+                  {running && displaySign && (
+                    <div className="pointer-events-none absolute inset-0 z-10 rounded-[1.85rem] ring-4 ring-pastel-grape/25 animate-pulse" />
+                  )}
+
+                  <div className="p-4 pb-0 sm:p-5 sm:pb-0">
+                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-ink/70">
+                          📷 Tu cámara
+                        </p>
+                        <p className="mt-0.5 text-lg font-extrabold text-pastel-ink">{statusLabel}</p>
+                      </div>
+                      {running && mlMode && handVisible && bufferLen > 0 && !inCooldown && (
+                        <div className="shrink-0 rounded-xl border-2 border-white/60 bg-white/80 px-3 py-2">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-pastel-sub">Captura</p>
+                          <div className="mt-1 flex items-center gap-2">
+                            <div className="h-2 w-20 overflow-hidden rounded-full bg-pastel-blue/50">
+                              <div
+                                className="h-full rounded-full transition-all duration-100"
+                                style={{
+                                  width: `${bufferProgress}%`,
+                                  background: bufferLen >= MIN_FRAMES ? '#94D08E' : '#E9CF7E',
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs font-bold tabular-nums text-pastel-ink">{bufferLen}/{MIN_FRAMES}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="relative mx-4 mb-4 aspect-video overflow-hidden rounded-[1.25rem] border-2 border-white/70 bg-black shadow-inner sm:mx-5 sm:mb-5">
+                    <video ref={videoRef} autoPlay playsInline muted
+                      className="absolute inset-0 h-full w-full object-cover"
+                      style={{ transform: 'scaleX(-1)' }} />
+                    <canvas ref={canvasRef}
+                      className="absolute inset-0 h-full w-full pointer-events-none"
+                      style={{ transform: 'scaleX(-1)' }} />
+
+                    {!scriptsLoaded && !scriptsError && (
+                      <CameraOverlay icon="⏳" title="Cargando MediaPipe…" />
+                    )}
+                    {scriptsError && (
+                      <CameraOverlay icon="⚠️" title="Error cargando MediaPipe" subtitle={scriptsError} />
+                    )}
+                    {scriptsLoaded && !cameraOk && !cameraError && (
+                      <CameraOverlay icon="📷" title="Solicitando cámara…" />
+                    )}
+                    {cameraError && (
+                      <CameraOverlay icon="🚫" title="No se pudo iniciar la cámara" subtitle={cameraError} />
+                    )}
+
+                    {running && !mlMode && !mlConnecting && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-pastel-ink/75 p-6 backdrop-blur-sm">
+                        <div className="max-w-sm rounded-2xl border-2 border-pastel-blue-line bg-[#FAF6EC] p-5 text-center shadow-xl">
+                          <p className="text-3xl">⚠️</p>
+                          <p className="mt-2 text-lg font-extrabold text-pastel-ink">Servidor IA no conectado</p>
+                          <p className="mt-1 text-xs font-semibold text-pastel-sub">Ejecuta en una terminal:</p>
+                          <code className="mt-3 block rounded-xl border-2 border-pastel-ink/10 bg-white px-3 py-2 text-left text-[11px] font-mono text-pastel-grape">
+                            cd sign_ai &amp;&amp; uvicorn api:app --port 8000
+                          </code>
+                          <button
+                            onClick={retryMlConnection}
+                            className="mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white transition hover:brightness-110"
+                          >
+                            Reintentar conexión
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {displaySign && (
+                      <div className="absolute bottom-3 left-1/2 z-20 max-w-[90%] -translate-x-1/2 rounded-xl border-2 border-pastel-grape bg-white px-4 py-2 text-center shadow-[0_8px_24px_-8px_rgba(126,100,201,0.5)]">
+                        <p className="text-base font-extrabold uppercase tracking-wide text-pastel-grape sm:text-lg">
+                          {displaySign.replace(/_/g, ' ')}
+                        </p>
+                        <p className="text-[11px] font-bold text-pastel-sub">{Math.round(displayConf * 100)}% confianza</p>
+                      </div>
+                    )}
+
+                    <div className="absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-xl border-2 border-white/20 bg-black/50 px-2.5 py-1.5 text-xs font-bold text-white backdrop-blur">
+                      <span className={'h-2 w-2 rounded-full ' + (running ? 'bg-red-400 animate-pulse' : cameraOk ? 'bg-green-400' : 'bg-white/50')} />
+                      {running ? 'REC' : cameraOk ? 'Lista' : '…'}
+                    </div>
+                  </div>
+
+                  {/* Controles */}
+                  <div className="flex flex-wrap items-center gap-3 border-t-2 border-white/40 px-4 py-4 sm:px-5">
+                    {!running ? (
+                      <button
+                        onClick={startDetect}
+                        disabled={!cameraOk}
+                        className="inline-flex h-11 items-center gap-2 rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white shadow-[0_8px_20px_-6px_rgba(126,100,201,0.6)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <PlayIcon />
+                        Empezar a interpretar
+                      </button>
+                    ) : (
+                      <button
+                        onClick={stopDetect}
+                        className="inline-flex h-11 items-center gap-2 rounded-xl border-2 border-pastel-ink/20 bg-white px-5 text-sm font-bold text-pastel-ink transition hover:bg-pastel-cream"
+                      >
+                        <StopIcon />
+                        Detener
+                      </button>
+                    )}
+
+                    <label className="ml-auto inline-flex cursor-pointer select-none items-center gap-2 rounded-xl border-2 border-white/60 bg-white/80 px-3 py-2 text-sm font-bold text-pastel-ink">
+                      <input
+                        type="checkbox"
+                        checked={audioOn}
+                        onChange={(e) => setAudioOn(e.target.checked)}
+                        className="h-4 w-4 accent-pastel-grape"
+                      />
+                      🔊 Voz alta
+                    </label>
+                  </div>
+                </div>
+
+                {sentence.length > 0 && (
+                  <OutputCard title="Conversación" emptyIcon="💬" hasContent>
+                    <p className="text-xl font-extrabold leading-relaxed tracking-wide text-pastel-ink sm:text-2xl">
+                      {sentence.map((s) => s.replace(/_/g, ' ')).join(' ')}
+                    </p>
+                  </OutputCard>
+                )}
+
+                {!running && !history.length && (
+                  <div className="rounded-2xl border-2 border-dashed border-pastel-blue-line bg-pastel-blue/40 px-4 py-4 text-center">
+                    <p className="text-sm font-bold text-pastel-ink">
+                      Pulsa <strong className="text-pastel-grape">Empezar a interpretar</strong> y haz una seña frente a la cámara
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Panel lateral */}
+              <div className="flex flex-col gap-5 lg:col-span-5">
+                {/* Última detección — hero */}
+                <div className="rounded-[1.5rem] border-[3px] border-pastel-blue-line bg-white p-5 shadow-[0_16px_36px_-22px_rgba(45,42,38,0.35)] sm:p-6">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">Última seña</p>
+                  {latest ? (
+                    <>
+                      <p className="mt-3 text-4xl font-extrabold uppercase tracking-tight text-pastel-grape sm:text-5xl">
+                        {latest.sign.replace(/_/g, ' ')}
+                      </p>
+                      <div className="mt-4">
+                        <div className="mb-1 flex justify-between text-xs font-bold text-pastel-sub">
+                          <span>Confianza</span>
+                          <span>{confPct}%</span>
+                        </div>
+                        <div className="h-2.5 overflow-hidden rounded-full border border-pastel-ink/10 bg-pastel-cream">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-pastel-blue-line to-pastel-grape transition-all duration-500"
+                            style={{ width: `${confPct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="mt-4 flex flex-col items-center rounded-xl border-2 border-dashed border-pastel-ink/10 bg-pastel-cream/50 px-4 py-8 text-center">
+                      <span className="text-4xl opacity-50">🤟</span>
+                      <p className="mt-2 text-sm font-semibold text-pastel-sub">
+                        Aquí aparecerá la seña reconocida
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Historial */}
+                <OutputCard
+                  title="Historial reciente"
+                  emptyIcon="📋"
+                  hasContent={history.length > 0}
+                  empty="Cada seña reconocida aparecerá aquí."
+                >
+                  <ul className="space-y-2">
+                    {history.map((h, i) => (
+                      <li
+                        key={i}
+                        className="flex items-center gap-3 rounded-xl border-2 border-pastel-blue-line/50 bg-pastel-blue/20 px-3 py-2"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-extrabold text-pastel-grape">
+                          {i + 1}
+                        </span>
+                        <span className="flex-1 text-sm font-bold text-pastel-ink">{h.sign.replace(/_/g, ' ')}</span>
+                        <span className="text-xs font-extrabold text-pastel-sub">{Math.round((h.confidence || 0) * 100)}%</span>
+                      </li>
+                    ))}
+                  </ul>
+                </OutputCard>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-pastel-ink/10 px-6 py-5 text-center">
+        <p className="text-xs text-pastel-sub">GNN + LSTM · solo manos · MediaPipe Holistic</p>
+      </footer>
+    </div>
+  )
+}
+
+function StatusPill({ variant, children }) {
+  const styles = {
+    live: 'border-pastel-grape bg-pastel-grape text-white shadow-[0_6px_16px_-6px_rgba(126,100,201,0.6)]',
+    count: 'border-pastel-blue-line bg-pastel-blue text-pastel-ink',
+  }
+  return (
+    <span className={'inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-xs font-bold ' + styles[variant]}>
+      {children}
+    </span>
+  )
+}
+
+function MlStatusPill({ mlMode, mlConnecting, onRetry }) {
+  const connected = mlMode && !mlConnecting
+  const label = mlConnecting ? 'Conectando IA…' : mlMode ? 'IA conectada' : 'Sin conexión IA'
+  return (
+    <button
+      type="button"
+      onClick={onRetry}
+      disabled={!onRetry}
+      className={
+        'inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-xs font-bold transition ' +
+        (connected
+          ? 'border-pastel-green-line bg-pastel-green text-pastel-ink cursor-default'
+          : mlConnecting
+            ? 'border-pastel-yellow-line bg-pastel-yellow text-pastel-ink cursor-default'
+            : 'border-pastel-pink/50 bg-white text-pastel-sub hover:border-pastel-purple-line cursor-pointer')
       }
-      footer="GNN + LSTM · solo manos · MediaPipe Holistic"
+      title={onRetry ? 'Reintentar conexión con IA' : undefined}
     >
-      <div className="mb-8 animate-fade-up">
-        <SectionLabel color="blue">Interpretar</SectionLabel>
-        <h1 className="mt-4 text-2xl font-extrabold tracking-tight md:text-3xl">
-          Señas a texto en tiempo real
-        </h1>
-        <p className="mt-2 max-w-xl text-sm text-pastel-sub">
-          Apunta la cámara a tus manos y Signara reconocerá cada seña.
-        </p>
+      <span className={`h-2 w-2 rounded-full ${
+        mlConnecting ? 'bg-pastel-yellow-line animate-pulse' :
+        mlMode ? 'bg-pastel-green-line animate-pulse' : 'bg-pastel-sub/40'
+      }`} />
+      {label}
+    </button>
+  )
+}
+
+function OutputCard({ title, empty, emptyIcon, hasContent, children }) {
+  return (
+    <div className="rounded-[1.5rem] border-2 border-pastel-ink/10 bg-white p-4 shadow-[0_14px_30px_-24px_rgba(45,42,38,0.35)] sm:p-5">
+      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">{title}</p>
+      <div className="mt-3">
+        {hasContent ? children : (
+          <div className="flex flex-col items-center rounded-xl border-2 border-dashed border-pastel-ink/10 bg-pastel-cream/50 px-4 py-6 text-center">
+            {emptyIcon && <span className="text-3xl opacity-50">{emptyIcon}</span>}
+            <p className="mt-2 text-sm font-semibold text-pastel-sub">{empty}</p>
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
 
-      <div className="grid grid-cols-1 gap-6 flex-1 animate-fade-up lg:grid-cols-5">
+function CameraOverlay({ icon, title, subtitle }) {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-pastel-ink/80 p-6 text-center backdrop-blur-sm">
+      <span className="text-4xl">{icon}</span>
+      <p className="mt-3 text-base font-extrabold text-white">{title}</p>
+      {subtitle && <p className="mt-2 max-w-xs text-sm font-semibold text-white/80">{subtitle}</p>}
+    </div>
+  )
+}
 
-        {/* ── Cámara ── */}
-        <div className="lg:col-span-3 flex flex-col gap-4">
-          <div className="relative aspect-video overflow-hidden rounded-[1.75rem] border-2 border-pastel-ink/10 bg-black shadow-[0_16px_36px_-22px_rgba(45,42,38,0.45)]">
-            <video ref={videoRef} autoPlay playsInline muted
-              className="absolute inset-0 h-full w-full object-cover"
-              style={{ transform: 'scaleX(-1)' }} />
-            <canvas ref={canvasRef}
-              className="absolute inset-0 h-full w-full pointer-events-none"
-              style={{ transform: 'scaleX(-1)' }} />
+function BackIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 12H5M12 19l-7-7 7-7" />
+    </svg>
+  )
+}
 
-            {!scriptsLoaded && !scriptsError && (
-              <div className="absolute inset-0 flex items-center justify-center text-white/80 text-sm">
-                Cargando MediaPipe...
-              </div>
-            )}
-            {scriptsError && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white p-6">
-                <p className="font-semibold text-lg">Error cargando MediaPipe</p>
-                <p className="mt-2 text-sm text-white/80">{scriptsError}</p>
-              </div>
-            )}
-            {scriptsLoaded && !cameraOk && !cameraError && (
-              <div className="absolute inset-0 flex items-center justify-center text-white/80 text-sm">
-                Solicitando cámara...
-              </div>
-            )}
-            {cameraError && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white p-6">
-                <p className="font-semibold text-lg">No se pudo iniciar la cámara</p>
-                <p className="mt-2 text-sm text-white/80 max-w-sm">{cameraError}</p>
-              </div>
-            )}
+function PlayIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="5 3 19 12 5 21 5 3" />
+    </svg>
+  )
+}
 
-            {/* Status badge */}
-            <div className="absolute top-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/55 backdrop-blur text-white text-xs font-medium">
-              <span className={'inline-block h-2 w-2 rounded-full ' +
-                (running ? 'bg-red-400 animate-pulse' : cameraOk ? 'bg-green-400' : 'bg-white/60')} />
-              {statusLabel}
-            </div>
-
-            {/* Barra de progreso de movimiento */}
-            {running && mlMode && handVisible && bufferLen > 0 && !inCooldown && (
-              <div className="absolute top-3 right-3 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/55 backdrop-blur text-white text-xs">
-                <div className="w-16 h-1.5 rounded-full bg-white/20 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-100"
-                    style={{
-                      width: `${Math.min(100, (bufferLen / MIN_FRAMES) * 100)}%`,
-                      background: bufferLen >= MIN_FRAMES ? '#4ade80' : '#facc15',
-                    }}
-                  />
-                </div>
-                <span className="tabular-nums">{bufferLen}/{MIN_FRAMES}</span>
-              </div>
-            )}
-
-            {/* Overlay cuando API no conectada */}
-            {running && !mlMode && !mlConnecting && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                <div className="text-center text-white px-6">
-                  <p className="text-2xl mb-2">⚠️</p>
-                  <p className="font-bold text-lg">Servidor IA no conectado</p>
-                  <p className="text-sm text-white/70 mt-1">Ejecuta en una terminal:</p>
-                  <code className="block mt-2 bg-black/50 rounded-lg px-4 py-2 text-xs text-green-300 font-mono">
-                    cd sign_ai &amp;&amp; uvicorn api:app --port 8000
-                  </code>
-                  <button onClick={retryMlConnection}
-                    className="mt-4 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-full text-sm font-semibold transition">
-                    Reintentar
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Seña confirmada — persiste hasta reset */}
-            {displaySign && (
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border-2 border-pastel-purple-line bg-white/95 px-5 py-2 text-sm font-bold tracking-wide text-pastel-ink shadow-[0_8px_20px_-12px_rgba(45,42,38,0.35)] backdrop-blur">
-                {displaySign.replace(/_/g, ' ')} · {Math.round(displayConf * 100)}%
-              </div>
-            )}
-          </div>
-
-          {/* Controles */}
-          <div className="flex flex-wrap items-center gap-3">
-            {!running ? (
-              <button onClick={startDetect} disabled={!cameraOk}
-                className="btn-pastel py-2.5 px-5 text-sm inline-flex items-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-                Empezar a interpretar
-              </button>
-            ) : (
-              <button onClick={stopDetect}
-                className="btn-pastel-ghost py-2.5 px-5 text-sm inline-flex items-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="6" y="6" width="12" height="12" rx="2" />
-                </svg>
-                Detener
-              </button>
-            )}
-            <label className="ml-auto inline-flex cursor-pointer select-none items-center gap-2 text-sm font-semibold text-pastel-sub">
-              <input type="checkbox" checked={audioOn} onChange={e => setAudioOn(e.target.checked)}
-                className="h-4 w-4 accent-pastel-grape" />
-              Leer en voz alta
-            </label>
-          </div>
-
-          {/* Oración acumulada */}
-          {sentence.length > 0 && (
-            <div className="pastel-card">
-              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-pastel-grape">
-                Conversación
-              </p>
-              <p className="mt-2 text-xl font-bold leading-relaxed tracking-wide text-pastel-ink">
-                {sentence.map(s => s.replace(/_/g, ' ')).join(' ')}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* ── Panel lateral ── */}
-        <div className="lg:col-span-2 flex flex-col gap-4">
-
-          {/* Modelo 3D de manos */}
-          <div className="pastel-card relative overflow-hidden p-0">
-            <HandModel3D ref={handModelRef} className="w-full h-52 rounded-2xl" />
-            <span className="pointer-events-none absolute left-3 top-2 text-[10px] font-bold uppercase tracking-[0.25em] text-pastel-sub">
-              Vista 3D · arrastra para rotar
-            </span>
-          </div>
-
-          <div className="pastel-card">
-            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-pastel-grape">
-              Última detección
-            </p>
-            {latest ? (
-              <div className="mt-2">
-                <p className="text-3xl font-extrabold text-pastel-grape">
-                  {latest.sign.replace(/_/g, ' ')}
-                </p>
-                <p className="mt-2 text-xs text-pastel-sub">
-                  Confianza: {Math.round((latest.confidence || 0) * 100)}%
-                </p>
-              </div>
-            ) : (
-              <p className="mt-2 italic text-pastel-sub">
-                Pulsa <strong className="font-bold text-pastel-ink">Empezar a interpretar</strong> y haz una seña.
-              </p>
-            )}
-          </div>
-
-          <div className="pastel-card min-h-[180px] flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-pastel-grape">
-              Historial
-            </p>
-            {history.length === 0 ? (
-              <p className="mt-2 italic text-pastel-sub">Aquí verás cada seña reconocida.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {history.map((h, i) => (
-                  <li key={i} className="flex items-baseline gap-3">
-                    <span className="chip">{h.sign.replace(/_/g, ' ')}</span>
-                    <span className="ml-auto text-[11px] font-semibold text-pastel-sub">
-                      {Math.round((h.confidence || 0) * 100)}%
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      </div>
-    </AppShell>
+function StopIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
   )
 }

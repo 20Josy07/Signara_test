@@ -58,7 +58,7 @@ export default function ModeSelection({ onSelect, onBack }) {
                 title="Interpretar"
                 headline="Muestra tus manos, Signara entiende"
                 description="La cámara detecta tus señas y las convierte en texto o voz al instante."
-                features={['Reconocimiento con IA', 'Vista 3D de manos', 'Lectura en voz alta']}
+                features={['Reconocimiento con IA', 'Texto al instante', 'Lectura en voz alta']}
                 icon={<CameraIcon />}
                 cta="Empezar a interpretar"
                 onClick={() => onSelect('interpret')}
