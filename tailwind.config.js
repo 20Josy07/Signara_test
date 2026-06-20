@@ -4,6 +4,13 @@ export default {
   theme: {
     extend: {
       colors: {
+        bridge: {
+          purple: '#7060A8',
+          iris: '#934CFF',
+          blue: '#1F2675',
+          yellow: '#FFDE59',
+          red: '#FF4D4D',
+        },
         signara: {
           blue: '#1F40C2',
           sky: '#9DCDF7',
@@ -19,9 +26,25 @@ export default {
           azure: '#2E7CF8',
           mist: '#77AAF9',
         },
+        pastel: {
+          cream: '#F7F3EA',
+          ink: '#2D2A26',
+          sub: '#6B665E',
+          green: '#CDEFC9',
+          'green-line': '#94D08E',
+          blue: '#D4E6FB',
+          'blue-line': '#93BEF0',
+          purple: '#E4DAF8',
+          'purple-line': '#BCA4E6',
+          grape: '#7E64C9',
+          yellow: '#FBEFC4',
+          'yellow-line': '#E9CF7E',
+          pink: '#FF7E92',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+        display: ['Nunito', 'Inter', 'system-ui', 'sans-serif'],
       },
       backgroundImage: {
         'signara-gradient':
@@ -32,6 +55,8 @@ export default {
           'linear-gradient(90deg, #1F40C2 0%, #7060A8 100%)',
         halo:
           'linear-gradient(135deg, #934CFF 0%, #2E7CF8 100%)',
+        'landing-gradient':
+          'linear-gradient(145deg, #934CFF 0%, #7060A8 35%, #1F40C2 70%, #2E7CF8 100%)',
       },
       boxShadow: {
         soft: '0 10px 40px -10px rgba(31, 38, 117, 0.35)',

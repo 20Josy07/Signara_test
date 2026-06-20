@@ -56,7 +56,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen w-full relative overflow-x-hidden">
+    <div className={`min-h-screen w-full relative ${screen !== 'landing' ? 'overflow-x-hidden' : ''}`}>
       {screen !== 'landing' && (
         <>
           <div className="absolute inset-0 bg-signara-gradient" />

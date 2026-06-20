@@ -19,7 +19,15 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: #1F2675;
-  background: #f6f8ff;
+  background: #1F2675;
+}
+
+/* Fondo del landing — claro tipo papel estilo "Synapse" */
+.landing-page-bg {
+  position: relative;
+  background-color: #F7F3EA;
+  background-image: radial-gradient(rgba(45, 42, 38, 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
 }
 
 /* Custom scrollbar to match brand */
