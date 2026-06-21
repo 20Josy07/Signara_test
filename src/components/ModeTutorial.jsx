@@ -22,6 +22,8 @@ const DIM_PANEL =
 
 const CARD_WIDTH = 320
 const CARD_HEIGHT_EST = 300
+const MOBILE_CARD_RESERVE = 292
+const MOBILE_BREAKPOINT = 640
 const VIEW_MARGIN = 16
 const CARD_GAP = 14
 const STEP_MORPH_MS = 480
@@ -30,13 +32,20 @@ const STEP_MOTION = 'tutorial-step-motion'
 const STEP_MOTION_LIVE = 'tutorial-step-motion--live'
 const CARD_MOTION = 'tutorial-card-motion'
 
+function isMobileLayout() {
+  return window.innerWidth < MOBILE_BREAKPOINT
+}
+
 function measureSpot(el, pad = 10) {
+  const mobile = isMobileLayout()
+  const edgePad = mobile ? 6 : pad
   const r = el.getBoundingClientRect()
   return {
-    top: r.top - pad,
-    left: r.left - pad,
-    width: r.width + pad * 2,
-    height: r.height + pad * 2,
+    top: r.top - edgePad,
+    left: r.left - edgePad,
+    width: r.width + edgePad * 2,
+    height: r.height + edgePad * 2,
+    mobile,
   }
 }
 
@@ -63,13 +72,25 @@ function applyScrollLock(scrollY = window.scrollY) {
   document.body.style.width = '100%'
 }
 
-function scrollTargetIntoView(el, { animate = false, onFrame } = {}) {
+function scrollTargetIntoView(el, { animate = false, onFrame, mobile = isMobileLayout() } = {}) {
   releaseScrollLock()
-  el.scrollIntoView({
-    block: 'center',
-    inline: 'nearest',
-    behavior: animate ? 'smooth' : 'auto',
-  })
+
+  if (mobile) {
+    const r = el.getBoundingClientRect()
+    const maxBottom = window.innerHeight - MOBILE_CARD_RESERVE
+
+    if (r.bottom > maxBottom) {
+      window.scrollBy({ top: r.bottom - maxBottom + 12, behavior: animate ? 'smooth' : 'auto' })
+    } else if (r.top < VIEW_MARGIN) {
+      window.scrollBy({ top: r.top - VIEW_MARGIN, behavior: animate ? 'smooth' : 'auto' })
+    }
+  } else {
+    el.scrollIntoView({
+      block: 'center',
+      inline: 'nearest',
+      behavior: animate ? 'smooth' : 'auto',
+    })
+  }
 
   if (!animate) {
     applyScrollLock(window.scrollY)
@@ -96,8 +117,11 @@ function scrollTargetIntoView(el, { animate = false, onFrame } = {}) {
   })
 }
 
-function targetNeedsScroll(el) {
+function targetNeedsScroll(el, mobile = isMobileLayout()) {
   const r = el.getBoundingClientRect()
+  if (mobile) {
+    return r.top < VIEW_MARGIN || r.bottom > window.innerHeight - MOBILE_CARD_RESERVE
+  }
   const margin = 56
   return r.top < margin || r.bottom > window.innerHeight - margin
 }
@@ -114,6 +138,16 @@ function cardOverlapsSpot(cardLeft, cardTop, cardWidth, spot) {
 }
 
 function cardStyleForSpot(spot) {
+  if (spot.mobile || isMobileLayout()) {
+    return {
+      left: VIEW_MARGIN,
+      right: VIEW_MARGIN,
+      bottom: Math.max(VIEW_MARGIN, 12),
+      width: 'auto',
+      maxWidth: 'none',
+    }
+  }
+
   const width = Math.min(CARD_WIDTH, Math.max(260, window.innerWidth - VIEW_MARGIN * 2))
   const spotCenterX = spot.left + spot.width / 2
   const preferRight = spotCenterX < window.innerWidth / 2
@@ -159,8 +193,9 @@ function cardStyleForSpot(spot) {
 function TutorialDimPanels({ spot, visible, onDismiss, motionClass }) {
   if (!spot) return null
 
-  const { top, left, width, height } = spot
+  const { top, left, width, height, mobile } = spot
   const panelMotion = visible ? 'opacity-100' : 'opacity-0'
+  const bottomReserve = mobile ? MOBILE_CARD_RESERVE : 0
 
   return (
     <>
@@ -187,8 +222,12 @@ function TutorialDimPanels({ spot, visible, onDismiss, motionClass }) {
       />
       <button
         type="button"
-        className={DIM_PANEL + ' inset-x-0 bottom-0 ' + panelMotion + ' ' + motionClass}
-        style={{ top: top + height }}
+        className={DIM_PANEL + ' inset-x-0 ' + panelMotion + ' ' + motionClass}
+        style={
+          bottomReserve > 0
+            ? { top: top + height, bottom: bottomReserve }
+            : { top: top + height, bottom: 0 }
+        }
         onClick={onDismiss}
         aria-label="Cerrar tutorial"
       />
@@ -216,6 +255,9 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
   const [spot, setSpot] = useState(null)
   const [stepAnimReady, setStepAnimReady] = useState(false)
   const [spotLive, setSpotLive] = useState(false)
+  const [layoutMobile, setLayoutMobile] = useState(() =>
+    typeof window !== 'undefined' ? isMobileLayout() : false,
+  )
   const stepAnimReadyRef = useRef(false)
   const { closing, requestClose } = useMotionExit(onComplete, MODAL_EXIT_MS)
 
@@ -275,6 +317,22 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
   }, [open])
 
   useEffect(() => {
+    if (!open) return
+
+    const onResize = () => {
+      const mobile = isMobileLayout()
+      setLayoutMobile(mobile)
+      if (step?.target) {
+        const el = document.querySelector(`[data-tutorial="${step.target}"]`)
+        if (el) setSpot(measureSpot(el))
+      }
+    }
+
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [open, step?.target])
+
+  useEffect(() => {
     if (!open || !step?.target) {
       setSpot(null)
       return
@@ -298,13 +356,16 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
     }
 
     const alignTarget = async () => {
+      const mobile = isMobileLayout()
+      setLayoutMobile(mobile)
       const animateScroll =
-        stepIndex > 0 && stepAnimReadyRef.current && targetNeedsScroll(targetEl)
+        stepIndex > 0 && stepAnimReadyRef.current && targetNeedsScroll(targetEl, mobile)
 
       if (animateScroll) {
         setSpotLive(true)
         await scrollTargetIntoView(targetEl, {
           animate: true,
+          mobile,
           onFrame: () => {
             if (!cancelled) setSpot(measureSpot(targetEl))
           },
@@ -313,6 +374,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
       } else {
         await scrollTargetIntoView(targetEl, {
           animate: false,
+          mobile,
           onFrame: () => {
             if (!cancelled) setSpot(measureSpot(targetEl))
           },
@@ -369,12 +431,19 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
 
   const cardStyle = spot
     ? cardStyleForSpot(spot)
-    : {
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        maxWidth: CARD_WIDTH,
-      }
+    : layoutMobile
+      ? {
+          left: VIEW_MARGIN,
+          right: VIEW_MARGIN,
+          bottom: VIEW_MARGIN,
+          width: 'auto',
+        }
+      : {
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          maxWidth: CARD_WIDTH,
+        }
 
   const stepMotionClass = spotLive
     ? STEP_MOTION + ' ' + STEP_MOTION_LIVE
@@ -436,7 +505,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
 
       <div
         className={
-          'pointer-events-auto absolute z-10 rounded-[1.5rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] p-5 shadow-[0_24px_50px_-20px_rgba(45,42,38,0.55)] sm:p-6 ' +
+          'pointer-events-auto absolute z-10 max-h-[42vh] overflow-y-auto rounded-[1.5rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] p-4 shadow-[0_24px_50px_-20px_rgba(45,42,38,0.55)] sm:max-h-none sm:overflow-visible sm:p-6 ' +
           cardMotionClass +
           ' ' +
           (closing
