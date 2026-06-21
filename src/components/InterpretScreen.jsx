@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { ResetButton, SectionLabel } from './AppShell.jsx'
+import ModeTutorial, { TutorialHelpButton } from './ModeTutorial.jsx'
 import {
   AppPage,
   AppPageFooter,
@@ -9,6 +10,9 @@ import {
   AppPagePanel,
   AppPageStagger,
 } from './PageMotion.jsx'
+import { INTERPRET_TUTORIAL_STEPS } from '../data/modeTutorialSteps.js'
+import { useModeTutorial } from '../hooks/useModeTutorial.js'
+import { ML_API_URL, checkMlApiHealth, getMlApiCache } from '../utils/mlApi.js'
 
 const MEDIAPIPE_HOLISTIC_VER = '0.5.1675471629'
 const MEDIAPIPE_CAM_VER      = '0.3.1675466862'
@@ -21,7 +25,6 @@ const MP_SCRIPTS = [
 ]
 
 // ── Parámetros (tuned para navegador, equivalentes a 07_gnn_predict.py) ───────
-const ML_API_URL     = import.meta.env.VITE_ML_API_URL || 'http://localhost:8000'
 const SEQ_LEN        = 30
 const HAND_COUNT     = 21
 const UMBRAL         = 0.75   // confianza mínima — igual que Python
@@ -132,6 +135,8 @@ export default function InterpretScreen({ onBack, onHome }) {
   // UI state
   const [scriptsLoaded, setScriptsLoaded] = useState(false)
   const [scriptsError,  setScriptsError]  = useState(null)
+  const [cameraConsent, setCameraConsent] = useState(null)
+  const [cameraRetryKey, setCameraRetryKey] = useState(0)
   const [cameraOk,      setCameraOk]      = useState(false)
   const [cameraError,   setCameraError]   = useState(null)
   const [running,       setRunning]       = useState(false)
@@ -153,22 +158,23 @@ export default function InterpretScreen({ onBack, onHome }) {
   // ── Verificar API ML ───────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false
-    setMlConnecting(true)
-    fetch(`${ML_API_URL}/health`)
-      .then(r => r.json())
-      .then(data => {
-        if (cancelled) return
-        const ok = !!data.model_loaded
-        mlAvailableRef.current = ok
-        setMlMode(ok)
-        setMlConnecting(false)
-      })
-      .catch(() => {
-        if (cancelled) return
-        mlAvailableRef.current = false
-        setMlMode(false)
-        setMlConnecting(false)
-      })
+    const cached = getMlApiCache()
+
+    if (cached) {
+      mlAvailableRef.current = cached.ok
+      setMlMode(cached.ok)
+      setMlConnecting(false)
+    } else {
+      setMlConnecting(true)
+    }
+
+    checkMlApiHealth().then((result) => {
+      if (cancelled) return
+      mlAvailableRef.current = result.ok
+      setMlMode(result.ok)
+      setMlConnecting(false)
+    })
+
     return () => { cancelled = true }
   }, [])
 
@@ -181,9 +187,9 @@ export default function InterpretScreen({ onBack, onHome }) {
     return () => { cancelled = true }
   }, [])
 
-  // ── Inicializar Holistic + cámara ──────────────────────────────────────────
+  // ── Inicializar Holistic + cámara (solo tras consentimiento del usuario) ───
   useEffect(() => {
-    if (!scriptsLoaded) return
+    if (!scriptsLoaded || cameraConsent !== 'accepted') return
     const HolisticCtor = window.Holistic
     const CameraCtor   = window.Camera
     if (!HolisticCtor || !CameraCtor) {
@@ -231,9 +237,29 @@ export default function InterpretScreen({ onBack, onHome }) {
       try { holistic.close() } catch (_) {}
       holisticRef.current = null
       cameraRef.current   = null
+      setCameraOk(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scriptsLoaded])
+  }, [scriptsLoaded, cameraConsent, cameraRetryKey])
+
+  function acceptCameraPermission() {
+    setCameraConsent('accepted')
+    setCameraError(null)
+    setCameraOk(false)
+  }
+
+  function declineCameraPermission() {
+    setCameraConsent('declined')
+    setCameraError(null)
+    setCameraOk(false)
+    setRunning(false)
+  }
+
+  function retryCameraAccess() {
+    setCameraError(null)
+    setCameraOk(false)
+    setCameraRetryKey((k) => k + 1)
+  }
 
   // ── Voz ───────────────────────────────────────────────────────────────────
   function speak(text) {
@@ -445,24 +471,20 @@ export default function InterpretScreen({ onBack, onHome }) {
 
   function retryMlConnection() {
     setMlConnecting(true)
-    fetch(`${ML_API_URL}/health`)
-      .then(r => r.json())
-      .then(data => {
-        const ok = !!data.model_loaded
-        mlAvailableRef.current = ok
-        setMlMode(ok)
-        setMlConnecting(false)
-      })
-      .catch(() => {
-        mlAvailableRef.current = false
-        setMlMode(false)
+    checkMlApiHealth({ force: true })
+      .then((result) => {
+        mlAvailableRef.current = result.ok
+        setMlMode(result.ok)
         setMlConnecting(false)
       })
   }
 
   // ── Status HUD ────────────────────────────────────────────────────────────
   const statusLabel = (() => {
-    if (!running)                  return cameraOk ? 'Listo' : 'En espera'
+    if (cameraConsent === null)    return 'Permiso requerido'
+    if (cameraConsent === 'declined') return 'Cámara desactivada'
+    if (!cameraOk && cameraError)  return 'Sin acceso a cámara'
+    if (!running)                  return cameraOk ? 'Listo' : 'Conectando…'
     if (!mlMode)                   return '⚠ Servidor IA no conectado'
     if (!handVisible)              return 'Muestra una mano'
     if (displaySign && inCooldown) return `${displaySign.replace(/_/g, ' ')} · ${Math.round(displayConf * 100)}%`
@@ -473,6 +495,8 @@ export default function InterpretScreen({ onBack, onHome }) {
 
   const bufferProgress = Math.min(100, (bufferLen / MIN_FRAMES) * 100)
   const confPct = latest ? Math.round((latest.confidence || 0) * 100) : 0
+
+  const tutorial = useModeTutorial('interpret')
 
   return (
     <AppPage>
@@ -492,7 +516,10 @@ export default function InterpretScreen({ onBack, onHome }) {
             Signara
           </button>
 
-          <ResetButton onClick={handleReset} />
+          <div className="flex items-center gap-2">
+            <TutorialHelpButton onClick={tutorial.start} />
+            <ResetButton onClick={handleReset} />
+          </div>
       </AppPageHeader>
 
       <AppPageMain>
@@ -532,6 +559,7 @@ export default function InterpretScreen({ onBack, onHome }) {
             <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
               <AppPageStagger className="flex flex-col gap-5 lg:col-span-7">
                 <div
+                  data-tutorial="interpret-camera"
                   className={
                     'relative overflow-hidden rounded-[2rem] border-[3px] shadow-[0_24px_50px_-28px_rgba(147,190,240,0.75)] ' +
                     (running && handVisible
@@ -585,11 +613,32 @@ export default function InterpretScreen({ onBack, onHome }) {
                     {scriptsError && (
                       <CameraOverlay icon="⚠️" title="Error cargando MediaPipe" subtitle={scriptsError} />
                     )}
-                    {scriptsLoaded && !cameraOk && !cameraError && (
-                      <CameraOverlay icon="📷" title="Solicitando cámara…" />
+                    {scriptsLoaded && cameraConsent === null && (
+                      <CameraPermissionPrompt
+                        onAccept={acceptCameraPermission}
+                        onDecline={declineCameraPermission}
+                      />
+                    )}
+                    {scriptsLoaded && cameraConsent === 'declined' && !cameraOk && (
+                      <CameraOverlay
+                        icon="📷"
+                        title="Cámara no activada"
+                        subtitle="Sin permiso de cámara no podemos interpretar tus señas. Puedes concederlo cuando quieras."
+                        actionLabel="Conceder permisos"
+                        onAction={acceptCameraPermission}
+                      />
+                    )}
+                    {scriptsLoaded && cameraConsent === 'accepted' && !cameraOk && !cameraError && (
+                      <CameraOverlay icon="📷" title="Conectando cámara…" />
                     )}
                     {cameraError && (
-                      <CameraOverlay icon="🚫" title="No se pudo iniciar la cámara" subtitle={cameraError} />
+                      <CameraOverlay
+                        icon="🚫"
+                        title="No se pudo iniciar la cámara"
+                        subtitle={cameraError}
+                        actionLabel="Reintentar"
+                        onAction={retryCameraAccess}
+                      />
                     )}
 
                     {running && !mlMode && !mlConnecting && (
@@ -627,7 +676,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                   </div>
 
                   {/* Controles */}
-                  <div className="flex flex-wrap items-center gap-3 border-t-2 border-white/40 px-4 py-4 sm:px-5">
+                  <div className="flex flex-wrap items-center gap-3 border-t-2 border-white/40 px-4 py-4 sm:px-5" data-tutorial="interpret-start">
                     {!running ? (
                       <button
                         onClick={startDetect}
@@ -677,8 +726,10 @@ export default function InterpretScreen({ onBack, onHome }) {
               </AppPageStagger>
 
               <AppPageStagger className="flex flex-col gap-5 lg:col-span-5">
-                {/* Última detección — hero */}
-                <div className="motion-surface animate-motion-scale-in rounded-[1.5rem] border-[3px] border-pastel-blue-line bg-white p-5 shadow-[0_16px_36px_-22px_rgba(45,42,38,0.35)] sm:p-6">
+                <div
+                  data-tutorial="interpret-results"
+                  className="motion-surface animate-motion-scale-in rounded-[1.5rem] border-[3px] border-pastel-blue-line bg-white p-5 shadow-[0_16px_36px_-22px_rgba(45,42,38,0.35)] sm:p-6"
+                >
                   <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">Última seña</p>
                   {latest ? (
                     <>
@@ -709,6 +760,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                 </div>
 
                 {/* Historial */}
+                <div data-tutorial="interpret-history">
                 <OutputCard
                   title="Historial reciente"
                   emptyIcon="📋"
@@ -730,6 +782,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                     ))}
                   </ul>
                 </OutputCard>
+                </div>
               </AppPageStagger>
             </div>
         </AppPagePanel>
@@ -738,6 +791,13 @@ export default function InterpretScreen({ onBack, onHome }) {
       <AppPageFooter>
         <p className="text-xs text-pastel-sub">GNN + LSTM · solo manos · MediaPipe Holistic</p>
       </AppPageFooter>
+
+      <ModeTutorial
+        mode="interpret"
+        steps={INTERPRET_TUTORIAL_STEPS}
+        open={tutorial.open}
+        onComplete={tutorial.finish}
+      />
     </AppPage>
   )
 }
@@ -797,12 +857,52 @@ function OutputCard({ title, empty, emptyIcon, hasContent, children }) {
   )
 }
 
-function CameraOverlay({ icon, title, subtitle }) {
+function CameraPermissionPrompt({ onAccept, onDecline }) {
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-pastel-ink/80 p-6 backdrop-blur-sm">
+      <div className="max-w-sm rounded-2xl border-2 border-pastel-blue-line bg-[#FAF6EC] p-5 text-center shadow-xl">
+        <p className="text-3xl">📷</p>
+        <p className="mt-2 text-lg font-extrabold text-pastel-ink">Necesitamos tu cámara</p>
+        <p className="mt-2 text-sm leading-relaxed text-pastel-sub">
+          Para interpretar lengua de señas, Signara necesita acceso a la cámara de tu dispositivo.
+          Si no concedes el permiso, esta función no estará disponible.
+        </p>
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <button
+            type="button"
+            onClick={onAccept}
+            className="motion-press inline-flex h-11 items-center justify-center rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white transition hover:brightness-110"
+          >
+            Conceder permisos
+          </button>
+          <button
+            type="button"
+            onClick={onDecline}
+            className="motion-press inline-flex h-11 items-center justify-center rounded-xl border-2 border-pastel-ink/15 bg-white px-5 text-sm font-bold text-pastel-sub transition hover:text-pastel-ink"
+          >
+            Ahora no
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CameraOverlay({ icon, title, subtitle, actionLabel, onAction }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-pastel-ink/80 p-6 text-center backdrop-blur-sm">
       <span className="text-4xl">{icon}</span>
       <p className="mt-3 text-base font-extrabold text-white">{title}</p>
       {subtitle && <p className="mt-2 max-w-xs text-sm font-semibold text-white/80">{subtitle}</p>}
+      {actionLabel && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="motion-press mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white transition hover:brightness-110"
+        >
+          {actionLabel}
+        </button>
+      )}
     </div>
   )
 }

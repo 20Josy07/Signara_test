@@ -115,7 +115,7 @@ const TextInputPanel = forwardRef(function TextInputPanel(
   }
 
   return (
-    <form onSubmit={submit} className="w-full">
+    <form onSubmit={submit} className="w-full" data-tutorial="translate-input">
       {/* Selector de modo */}
       <div className="mb-3 grid grid-cols-2 gap-2">
         <ModeTab
@@ -205,7 +205,7 @@ const TextInputPanel = forwardRef(function TextInputPanel(
 
       {/* Ejemplos rápidos */}
       {!listening && (
-        <div className="mt-4">
+        <div className="mt-4" data-tutorial="translate-examples">
           <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-pastel-grape">
             Prueba con un clic
           </p>

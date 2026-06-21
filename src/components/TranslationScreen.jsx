@@ -3,6 +3,7 @@ import { ResetButton, SectionLabel } from './AppShell.jsx'
 import AvatarPlayer from './AvatarPlayer.jsx'
 import TextInputPanel from './TextInputPanel.jsx'
 import SignChips from './SignChips.jsx'
+import ModeTutorial, { TutorialHelpButton } from './ModeTutorial.jsx'
 import {
   AppPage,
   AppPageFooter,
@@ -12,6 +13,8 @@ import {
   AppPagePanel,
   AppPageStagger,
 } from './PageMotion.jsx'
+import { TRANSLATE_TUTORIAL_STEPS } from '../data/modeTutorialSteps.js'
+import { useModeTutorial } from '../hooks/useModeTutorial.js'
 import { translateText } from '../utils/translateText.js'
 import { textToSignTokens } from '../utils/textNormalizer.js'
 import {
@@ -176,9 +179,8 @@ export default function TranslationScreen({
   }
 
   const displaySigns = signs.map((s) => s.replace('.mp4', '').replace(/_/g, ' ').toUpperCase())
-  const progressPct = signs.length > 0 && activeIndex >= 0
-    ? Math.round(((activeIndex + 1) / signs.length) * 100)
-    : signs.length > 0 ? 100 : 0
+
+  const tutorial = useModeTutorial('translate')
 
   return (
     <AppPage>
@@ -198,7 +200,10 @@ export default function TranslationScreen({
             Signara
           </button>
 
-          <ResetButton onClick={handleReset} />
+          <div className="flex items-center gap-2">
+            <TutorialHelpButton onClick={tutorial.start} />
+            <ResetButton onClick={handleReset} />
+          </div>
       </AppPageHeader>
 
       <AppPageMain>
@@ -281,7 +286,7 @@ export default function TranslationScreen({
                     <div className="pointer-events-none absolute inset-0 rounded-[1.85rem] ring-4 ring-pastel-grape/25 ring-offset-2 ring-offset-transparent animate-pulse" />
                   )}
 
-                  <div className="relative mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="relative mb-4">
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-ink/70">
                         👀 Mira aquí
@@ -290,32 +295,13 @@ export default function TranslationScreen({
                         {activeSign ? (
                           formatSign(activeSign)
                         ) : signs.length > 0 ? (
-                          'Preparando la siguiente seña…'
+                          'Interpretando…'
                         ) : (
                           'El avatar te espera'
                         )}
                       </p>
                     </div>
-
-                    {signs.length > 0 && (
-                      <div className="shrink-0 rounded-2xl border-2 border-pastel-ink/10 bg-white/90 px-4 py-2 text-center">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-pastel-sub">Progreso</p>
-                        <p className="text-2xl font-extrabold text-pastel-grape">
-                          {activeIndex >= 0 ? activeIndex + 1 : '—'}
-                          <span className="text-base text-pastel-sub"> / {signs.length}</span>
-                        </p>
-                      </div>
-                    )}
                   </div>
-
-                  {signs.length > 0 && (
-                    <div className="relative mb-4 h-2.5 overflow-hidden rounded-full border border-pastel-ink/10 bg-white/60">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-pastel-grape to-pastel-green-line transition-all duration-500 ease-out"
-                        style={{ width: `${progressPct}%` }}
-                      />
-                    </div>
-                  )}
 
                   <div className="relative flex flex-1 items-center justify-center rounded-[1.5rem] border-2 border-white/60 bg-[#FAF6EC]/90 p-4 shadow-inner sm:p-6">
                     <div className="w-full max-w-sm">
@@ -345,6 +331,13 @@ export default function TranslationScreen({
       <AppPageFooter>
         <p className="text-xs text-pastel-sub">Traducción en tiempo real · voz o texto a lengua de señas</p>
       </AppPageFooter>
+
+      <ModeTutorial
+        mode="translate"
+        steps={TRANSLATE_TUTORIAL_STEPS}
+        open={tutorial.open}
+        onComplete={tutorial.finish}
+      />
     </AppPage>
   )
 }

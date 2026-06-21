@@ -54,8 +54,12 @@ export function AppPageHeading({ children }) {
   )
 }
 
-export function AppPageStagger({ children, className = '' }) {
-  return <div className={'motion-stagger ' + className}>{children}</div>
+export function AppPageStagger({ children, className = '', ...rest }) {
+  return (
+    <div className={'motion-stagger ' + className} {...rest}>
+      {children}
+    </div>
+  )
 }
 
 export function AppPageFooter({ children }) {

@@ -46,7 +46,6 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
   // UI state
   const [currentLabel, setCurrentLabel] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [queueLen, setQueueLen] = useState(0)
   const [hasShownAny, setHasShownAny] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
 
@@ -66,9 +65,6 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
     isPlayingRef.current = v
     setIsPlaying(v)
   }
-  function refreshQueueLen() {
-    setQueueLen(queueRef.current.length)
-  }
   function altUrl(src) {
     if (!src) return null
     if (src.includes('%20')) return src.replace(/%20/g, '_')
@@ -84,7 +80,6 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
 
   // -------- core playback --------------------------------------------------
   function playNext() {
-    refreshQueueLen()
     if (queueRef.current.length === 0) {
       setPlaying(false)
       setCurrentLabel(null)
@@ -92,7 +87,6 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
       return
     }
     const sign = queueRef.current.shift()
-    refreshQueueLen()
 
     const src = getSignSrc(sign)
     if (!src) {
@@ -184,13 +178,11 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
     const sign = normalizeSign(rawSign)
     if (!getSignSrc(sign)) return
     queueRef.current.push(sign)
-    refreshQueueLen()
     if (!isPlayingRef.current) playNext()
   }
 
   function clearQueue() {
     queueRef.current = []
-    refreshQueueLen()
     setPlaying(false)
     setCurrentLabel(null)
     // Hide both videos, pause both
@@ -207,7 +199,6 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
     queueRef.current = (newSigns || [])
       .map(normalizeSign)
       .filter((s) => Boolean(getSignSrc(s)))
-    refreshQueueLen()
     setPlaying(false)
     setCurrentLabel(null)
     if (queueRef.current.length > 0) playNext()
@@ -254,7 +245,10 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
 
   return (
     <div className="relative w-full">
-      <div className="relative mx-auto aspect-[4/5] max-h-[58vh] w-full max-w-md overflow-hidden rounded-[1.75rem] border-2 border-pastel-ink/10 bg-white shadow-[0_16px_36px_-22px_rgba(45,42,38,0.45)]">
+      <div
+        data-tutorial="translate-avatar"
+        className="relative mx-auto aspect-[4/5] max-h-[58vh] w-full max-w-md overflow-hidden rounded-[1.75rem] border-2 border-pastel-ink/10 bg-white shadow-[0_16px_36px_-22px_rgba(45,42,38,0.45)]"
+      >
         {/* DOUBLE-BUFFER: two stacked <video> elements that crossfade.
             Initial inline opacity 0; we drive opacity imperatively from
             preloadAndSwap() so React never re-applies stale styles. */}
@@ -295,12 +289,6 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
           </div>
         )}
 
-        {queueLen > 0 && (
-          <div className="absolute top-4 right-4 rounded-full bg-pastel-grape px-2.5 py-1 text-[11px] font-bold text-white shadow-[0_8px_20px_-6px_rgba(126,100,201,0.6)]">
-            +{queueLen} en cola
-          </div>
-        )}
-
         {isPlaying && (
           <div className="absolute top-4 left-4 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/40 backdrop-blur text-white text-[11px] font-bold">
             <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
@@ -313,6 +301,7 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
+          data-tutorial="translate-picker"
           className="group flex w-full items-center gap-3 rounded-2xl border-[3px] border-pastel-green-line bg-pastel-green/50 px-4 py-3 text-left shadow-[0_10px_24px_-14px_rgba(45,42,38,0.3)] transition hover:border-pastel-grape hover:bg-pastel-green focus:outline-none focus:ring-4 focus:ring-pastel-purple/30 sm:px-5 sm:py-3.5"
           title="Elegir intérprete"
         >
