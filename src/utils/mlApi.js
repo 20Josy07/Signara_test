@@ -1,4 +1,8 @@
-export const ML_API_URL = import.meta.env.VITE_ML_API_URL || 'http://localhost:8000'
+export const ML_API_URL =
+  import.meta.env.VITE_ML_API_URL ||
+  (import.meta.env.PROD
+    ? 'https://signara-ml-api.onrender.com'
+    : 'http://localhost:8000')
 
 const CACHE_TTL_MS = 5 * 60 * 1000
 

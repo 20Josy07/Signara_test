@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -60,9 +60,26 @@ No escribas nada más que el JSON.`,
   }
 });
 
+app.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'signara-web',
+    note: 'La API de interpretar (ML) está en signara-ml-api.onrender.com/health',
+  });
+});
+
+const distDir = resolve(__dirname, 'dist');
+if (existsSync(distDir)) {
+  app.use(express.static(distDir));
+  app.get(/^(?!\/api).*/, (_req, res) => {
+    res.sendFile(resolve(distDir, 'index.html'));
+  });
+}
+
 process.on('uncaughtException', (err) => console.error('[Server] Error:', err));
 process.on('unhandledRejection', (err) => console.error('[Server] Promise rechazada:', err));
 
+const port = Number(process.env.PORT) || 3001;
 const server = createServer(app);
-server.listen(3001, () => console.log('API lista en http://localhost:3001'));
+server.listen(port, () => console.log(`Signara web en http://localhost:${port}`));
 server.on('error', (err) => console.error('[Server] Error al escuchar:', err));

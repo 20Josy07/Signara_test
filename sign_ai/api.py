@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+import torch
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -130,7 +131,6 @@ async def predict(req: PredictRequest):
 
     gnn_seq = sequence_compact_to_gnn(data, normalize=_normalize_inputs)
 
-    import torch
     x = torch.as_tensor(gnn_seq, dtype=torch.float32).unsqueeze(0)
     with torch.no_grad():
         logits = _model(x)
