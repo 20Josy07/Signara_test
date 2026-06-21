@@ -64,7 +64,7 @@ app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     service: 'signara-web',
-    note: 'La API de interpretar (ML) está en signara-ml-api.onrender.com/health',
+    note: 'La API de interpretar (ML) usa /health en el servicio de Render (sign_ai).',
   });
 });
 

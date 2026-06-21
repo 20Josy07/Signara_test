@@ -1,25 +1,9 @@
-# Render Blueprint — dos servicios separados:
-#   signara-web      → React + server.js (traducción Claude)
-#   signara-ml-api   → Python FastAPI (interpretar señas)
-#
-# La URL /health de interpretar NO está en signara.onrender.com;
-# está en https://signara-ml-api.onrender.com/health
+# Blueprint Render — API ML en sign_ai (https://signara.onrender.com)
+# La web está en Netlify.
 
 services:
   - type: web
-    name: signara-web
-    runtime: node
-    buildCommand: npm install && npm run build
-    startCommand: node server.js
-    envVars:
-      - key: NODE_VERSION
-        value: 20
-      # Necesaria en BUILD para que Vite la embeba en el frontend:
-      - key: VITE_ML_API_URL
-        value: https://signara-ml-api.onrender.com
-
-  - type: web
-    name: signara-ml-api
+    name: signara
     runtime: python
     rootDir: sign_ai
     buildCommand: pip install -r requirements_api.txt
@@ -27,3 +11,4 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+    plan: free
