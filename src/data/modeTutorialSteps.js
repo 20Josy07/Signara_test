@@ -22,8 +22,6 @@ export const TRANSLATE_TUTORIAL_STEPS = [
     title: 'Mira las señas aquí',
     body: 'El avatar reproduce cada seña en orden. Arriba verás cuál está señando ahora.',
     emoji: '👀',
-    scrollAlign: 'top',
-    scrollOffsetUp: 36,
   },
   {
     target: 'translate-picker',

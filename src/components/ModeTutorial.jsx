@@ -72,67 +72,20 @@ function applyScrollLock(scrollY = window.scrollY) {
   document.body.style.width = '100%'
 }
 
-function mobileSpotlightBounds(sheetHeight) {
-  const topMargin = 12
-  const bottomMargin = 16
-  const maxBottom = window.innerHeight - sheetHeight - bottomMargin
-
-  return {
-    topMargin,
-    maxBottom,
-    zoneHeight: Math.max(0, maxBottom - topMargin),
-  }
-}
-
-function computeMobileScrollDelta(
-  el,
-  sheetHeight,
-  { align = 'center', offsetUp = 0 } = {},
-) {
-  const r = el.getBoundingClientRect()
-  const { topMargin, maxBottom, zoneHeight } = mobileSpotlightBounds(sheetHeight)
-
-  let idealTop =
-    r.height > zoneHeight || align === 'top'
-      ? topMargin
-      : topMargin + (zoneHeight - r.height) / 2
-
-  idealTop -= offsetUp
-
-  let scrollDelta = r.top - idealTop
-
-  const projectedBottom = r.bottom - scrollDelta
-  if (projectedBottom > maxBottom) {
-    scrollDelta += projectedBottom - maxBottom
-  }
-
-  return scrollDelta
-}
-
 function scrollTargetIntoView(
   el,
-  {
-    animate = false,
-    onFrame,
-    mobile = isMobileLayout(),
-    sheetHeight = MOBILE_SHEET_FALLBACK,
-    scrollAlign = 'center',
-    scrollOffsetUp = 0,
-  } = {},
+  { animate = false, onFrame, mobile = isMobileLayout(), sheetHeight = MOBILE_SHEET_FALLBACK } = {},
 ) {
   releaseScrollLock()
 
   if (mobile) {
-    const scrollDelta = computeMobileScrollDelta(el, sheetHeight, {
-      align: scrollAlign,
-      offsetUp: scrollOffsetUp,
-    })
+    const r = el.getBoundingClientRect()
+    const spotlightMax = window.innerHeight - sheetHeight - 16
 
-    if (Math.abs(scrollDelta) > 1) {
-      window.scrollBy({
-        top: scrollDelta,
-        behavior: animate ? 'smooth' : 'auto',
-      })
+    if (r.bottom > spotlightMax) {
+      window.scrollBy({ top: r.bottom - spotlightMax + 8, behavior: animate ? 'smooth' : 'auto' })
+    } else if (r.top < 12) {
+      window.scrollBy({ top: r.top - 12, behavior: animate ? 'smooth' : 'auto' })
     }
   } else {
     el.scrollIntoView({
@@ -167,19 +120,11 @@ function scrollTargetIntoView(
   })
 }
 
-function targetNeedsScroll(
-  el,
-  mobile = isMobileLayout(),
-  sheetHeight = MOBILE_SHEET_FALLBACK,
-  { scrollAlign = 'center', scrollOffsetUp = 0 } = {},
-) {
+function targetNeedsScroll(el, mobile = isMobileLayout(), sheetHeight = MOBILE_SHEET_FALLBACK) {
   const r = el.getBoundingClientRect()
   if (mobile) {
-    const scrollDelta = computeMobileScrollDelta(el, sheetHeight, {
-      align: scrollAlign,
-      offsetUp: scrollOffsetUp,
-    })
-    return Math.abs(scrollDelta) > 2
+    const spotlightMax = window.innerHeight - sheetHeight - 16
+    return r.top < 12 || r.bottom > spotlightMax
   }
   const margin = 56
   return r.top < margin || r.bottom > window.innerHeight - margin
@@ -548,14 +493,8 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
       const mobile = isMobileLayout()
       setLayoutMobile(mobile)
       const reserve = mobile ? sheetHeight : MOBILE_SHEET_FALLBACK
-      const scrollOpts = {
-        scrollAlign: step.scrollAlign || 'center',
-        scrollOffsetUp: step.scrollOffsetUp || 0,
-      }
       const animateScroll =
-        stepIndex > 0 &&
-        stepAnimReadyRef.current &&
-        targetNeedsScroll(targetEl, mobile, reserve, scrollOpts)
+        stepIndex > 0 && stepAnimReadyRef.current && targetNeedsScroll(targetEl, mobile, reserve)
 
       if (animateScroll) {
         setSpotLive(true)
@@ -563,7 +502,6 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
           animate: true,
           mobile,
           sheetHeight: reserve,
-          ...scrollOpts,
           onFrame: () => {
             if (!cancelled) setSpot(measureSpot(targetEl))
           },
@@ -574,7 +512,6 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
           animate: false,
           mobile,
           sheetHeight: reserve,
-          ...scrollOpts,
           onFrame: () => {
             if (!cancelled) setSpot(measureSpot(targetEl))
           },
