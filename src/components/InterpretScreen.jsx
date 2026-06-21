@@ -869,7 +869,7 @@ function OutputCard({ title, empty, emptyIcon, hasContent, children }) {
 
 function CameraPermissionPrompt({ onAccept, onDecline }) {
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center overflow-y-auto bg-pastel-ink/78 p-3 backdrop-blur-sm sm:p-5">
+    <div className="absolute inset-0 z-30 flex items-center justify-center overflow-y-auto bg-pastel-ink/78 p-3 sm:p-5">
       <div className="my-auto w-full max-w-sm rounded-2xl border-2 border-pastel-blue-line bg-[#FAF6EC] p-4 text-center shadow-xl sm:p-5">
         <p className="text-2xl sm:text-3xl" aria-hidden="true">
           📷
