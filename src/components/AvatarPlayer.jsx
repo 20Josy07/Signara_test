@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useMotionExit } from '../hooks/useMotionExit.js'
 import { AVATARS, normalizeSign, getSignSrc } from '../utils/signMap.js'
 
 /**
@@ -249,7 +250,6 @@ const AvatarPlayer = forwardRef(function AvatarPlayer(
 
   function handleSelectAvatar(id) {
     if (onAvatarChange) onAvatarChange(id)
-    setPickerOpen(false)
   }
 
   return (
@@ -429,12 +429,25 @@ const AVATAR_CARD_STYLES = {
 
 function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
   const [previewId, setPreviewId] = useState(selectedId)
+  const [entered, setEntered] = useState(false)
   const preview = avatars.find((a) => a.id === previewId) || avatars[0]
   const meta = AVATAR_META[previewId] || AVATAR_META.alex
   const styles = AVATAR_CARD_STYLES[meta.color] || AVATAR_CARD_STYLES.purple
+  const { closing, requestClose } = useMotionExit(onClose)
 
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    let raf2
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setEntered(true))
+    })
+    return () => {
+      cancelAnimationFrame(raf1)
+      if (raf2) cancelAnimationFrame(raf2)
+    }
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') requestClose() }
     window.addEventListener('keydown', onKey)
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -442,31 +455,59 @@ function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
       window.removeEventListener('keydown', onKey)
       document.body.style.overflow = prevOverflow
     }
-  }, [onClose])
+  }, [requestClose])
 
   function confirmSelection() {
-    onSelect(previewId)
+    if (previewId === selectedId) {
+      requestClose()
+      return
+    }
+    requestClose(() => onSelect(previewId))
   }
+
+  const showMotion = entered && !closing
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-end justify-center p-0 sm:items-center sm:p-4"
-      onClick={onClose}
+      className={
+        'fixed inset-0 z-[200] flex items-end justify-center p-0 sm:items-center sm:p-4 ' +
+        (closing ? 'motion-exit-host' : '')
+      }
+      onClick={() => requestClose()}
       role="dialog"
       aria-modal="true"
       aria-labelledby="avatar-picker-title"
     >
       <div
-        className="absolute inset-0 bg-[#2D2A26]/75 backdrop-blur-md transition-opacity"
+        className={
+          'modal-backdrop-glass absolute inset-0 ' +
+          (closing
+            ? 'animate-motion-modal-backdrop-out'
+            : showMotion
+              ? 'animate-motion-modal-backdrop'
+              : 'opacity-0')
+        }
         aria-hidden="true"
       />
 
       <div
-        className="relative z-10 flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-[2rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] shadow-[0_40px_90px_-20px_rgba(0,0,0,0.55)] animate-fade-up sm:rounded-[2rem]"
+        className={
+          'relative z-10 flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-[2rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] shadow-[0_40px_90px_-20px_rgba(0,0,0,0.55)] sm:rounded-[2rem] ' +
+          (closing
+            ? 'animate-motion-slide-down sm:animate-motion-modal-out'
+            : showMotion
+              ? 'animate-motion-slide-up sm:animate-motion-modal-in'
+              : 'translate-y-8 scale-[0.96] opacity-0 sm:translate-y-6')
+        }
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Vista previa grande */}
-        <div className={'border-b-2 border-pastel-ink/10 px-5 py-6 sm:px-8 ' + styles.card}>
+        <div
+          className={
+            'border-b-2 border-pastel-ink/10 px-5 py-6 sm:px-8 ' +
+            styles.card +
+            (showMotion ? ' animate-motion-enter' : '')
+          }
+        >
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">
@@ -477,15 +518,21 @@ function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
               </h3>
             </div>
             <button
-              onClick={onClose}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border-2 border-pastel-ink/10 bg-white text-pastel-sub transition hover:border-pastel-purple-line hover:text-pastel-ink"
+              onClick={() => requestClose()}
+              className="motion-press inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border-2 border-pastel-ink/10 bg-white text-pastel-sub transition hover:border-pastel-purple-line hover:text-pastel-ink"
               aria-label="Cerrar"
             >
               <CloseIcon />
             </button>
           </div>
 
-          <div className="mt-5 flex items-center gap-4 rounded-2xl border-2 border-white/70 bg-white/80 p-4 shadow-sm">
+          <div
+            key={previewId}
+            className={
+              'mt-5 flex items-center gap-4 rounded-2xl border-2 border-white/70 bg-white/80 p-4 shadow-sm ' +
+              (showMotion ? 'animate-motion-fade-through' : '')
+            }
+          >
             <span className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-pastel-ink/10 bg-white sm:h-28 sm:w-28">
               <img
                 src={preview.image}
@@ -504,12 +551,11 @@ function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
           </div>
         </div>
 
-        {/* Lista de avatares */}
         <div className="overflow-y-auto px-5 py-5 sm:px-8">
           <p className="mb-3 text-xs font-extrabold uppercase tracking-wider text-pastel-grape">
             Todos los intérpretes
           </p>
-          <div className="space-y-3">
+          <div className={showMotion ? 'motion-stagger space-y-3' : 'space-y-3'}>
             {avatars.map((a) => {
               const m = AVATAR_META[a.id] || AVATAR_META.alex
               const s = AVATAR_CARD_STYLES[m.color] || AVATAR_CARD_STYLES.purple
@@ -522,7 +568,7 @@ function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
                   type="button"
                   onClick={() => setPreviewId(a.id)}
                   className={
-                    'flex w-full items-center gap-3 rounded-2xl border-[3px] p-3 text-left transition focus:outline-none sm:gap-4 sm:p-4 ' +
+                    'motion-surface flex w-full items-center gap-3 rounded-2xl border-[3px] p-3 text-left focus:outline-none sm:gap-4 sm:p-4 ' +
                     (isPreview
                       ? s.card + ' shadow-[0_12px_28px_-14px_rgba(45,42,38,0.35)] ring-4 ring-offset-2 ' + s.ring
                       : 'border-pastel-ink/10 bg-white hover:border-pastel-purple-line hover:bg-pastel-purple/20')
@@ -543,23 +589,22 @@ function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
                     </span>
                     <span className="mt-0.5 block text-xs font-semibold text-pastel-sub sm:text-sm">{m.desc}</span>
                   </span>
-                  {isPreview && (
-                    <span className="hidden shrink-0 text-xs font-extrabold text-pastel-grape sm:block">
-                      Vista previa
-                    </span>
-                  )}
                 </button>
               )
             })}
           </div>
         </div>
 
-        {/* Acciones */}
-        <div className="flex gap-3 border-t-2 border-pastel-ink/10 bg-white/60 px-5 py-4 sm:px-8">
+        <div
+          className={
+            'flex gap-3 border-t-2 border-pastel-ink/10 bg-white/60 px-5 py-4 sm:px-8 ' +
+            (showMotion ? 'animate-motion-enter [animation-delay:180ms]' : '')
+          }
+        >
           <button
             type="button"
-            onClick={onClose}
-            className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-pastel-ink/15 bg-white text-sm font-bold text-pastel-sub transition hover:text-pastel-ink sm:flex-none sm:px-5"
+            onClick={() => requestClose()}
+            className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-pastel-ink/15 bg-white text-sm font-bold text-pastel-sub transition hover:text-pastel-ink motion-press sm:flex-none sm:px-5"
           >
             Cancelar
           </button>
@@ -567,7 +612,7 @@ function AvatarPickerModal({ avatars, selectedId, onSelect, onClose }) {
             type="button"
             onClick={confirmSelection}
             disabled={previewId === selectedId}
-            className="inline-flex h-11 flex-[2] items-center justify-center gap-2 rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white shadow-[0_8px_20px_-6px_rgba(126,100,201,0.6)] transition hover:brightness-110 disabled:cursor-default disabled:opacity-50 sm:flex-1"
+            className="motion-press inline-flex h-11 flex-[2] items-center justify-center gap-2 rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white shadow-[0_8px_20px_-6px_rgba(126,100,201,0.6)] transition hover:brightness-110 disabled:cursor-default disabled:opacity-50 sm:flex-1"
           >
             {previewId === selectedId ? (
               'Ya está activo'

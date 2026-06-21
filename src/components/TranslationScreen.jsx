@@ -3,6 +3,15 @@ import { ResetButton, SectionLabel } from './AppShell.jsx'
 import AvatarPlayer from './AvatarPlayer.jsx'
 import TextInputPanel from './TextInputPanel.jsx'
 import SignChips from './SignChips.jsx'
+import {
+  AppPage,
+  AppPageFooter,
+  AppPageHeader,
+  AppPageHeading,
+  AppPageMain,
+  AppPagePanel,
+  AppPageStagger,
+} from './PageMotion.jsx'
 import { translateText } from '../utils/translateText.js'
 import { textToSignTokens } from '../utils/textNormalizer.js'
 import {
@@ -172,12 +181,11 @@ export default function TranslationScreen({
     : signs.length > 0 ? 100 : 0
 
   return (
-    <div className="landing-page-bg relative min-h-screen font-display text-pastel-ink">
-      <header className="sticky top-0 z-50 border-b border-pastel-ink/10 bg-pastel-cream/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6 md:px-8">
+    <AppPage>
+      <AppPageHeader>
           <button
             onClick={onBack}
-            className="inline-flex items-center gap-2 rounded-full border-2 border-pastel-ink/15 bg-white px-4 py-2 text-sm font-bold text-pastel-ink transition hover:border-pastel-purple-line hover:bg-pastel-purple/30 focus:outline-none focus:ring-4 focus:ring-pastel-purple"
+            className="motion-press inline-flex items-center gap-2 rounded-full border-2 border-pastel-ink/15 bg-white px-4 py-2 text-sm font-bold text-pastel-ink transition hover:border-pastel-purple-line hover:bg-pastel-purple/30 focus:outline-none focus:ring-4 focus:ring-pastel-purple"
           >
             <BackIcon />
             <span className="hidden sm:inline">Cambiar modo</span>
@@ -191,13 +199,11 @@ export default function TranslationScreen({
           </button>
 
           <ResetButton onClick={handleReset} />
-        </div>
-      </header>
+      </AppPageHeader>
 
-      <section className="px-4 pb-12 pt-5 sm:px-6 md:pt-7">
-        <div className="mx-auto max-w-6xl">
-          <div className="rounded-[2.5rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] px-5 py-7 shadow-[0_30px_70px_-40px_rgba(45,42,38,0.55)] sm:px-8 sm:py-9 md:px-10">
-            <div className="flex flex-col gap-4 border-b-2 border-pastel-ink/10 pb-7 animate-fade-up lg:flex-row lg:items-end lg:justify-between">
+      <AppPageMain>
+        <AppPagePanel>
+            <AppPageHeading>
               <div>
                 <SectionLabel color="green">Traducir</SectionLabel>
                 <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
@@ -208,7 +214,7 @@ export default function TranslationScreen({
                 </h1>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <AppPageStagger className="flex flex-wrap gap-2">
                 {liveMode && (
                   <StatusPill variant="live">
                     <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
@@ -222,11 +228,11 @@ export default function TranslationScreen({
                   </StatusPill>
                 )}
                 <StatusPill variant="avatar">🧑 {avatar.name}</StatusPill>
-              </div>
-            </div>
+              </AppPageStagger>
+            </AppPageHeading>
 
-            <div className="mt-7 grid grid-cols-1 gap-6 animate-fade-up lg:grid-cols-12 lg:gap-8">
-              <div className="flex flex-col gap-5 lg:col-span-5">
+            <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
+              <AppPageStagger className="flex flex-col gap-5 lg:col-span-5">
                 <TextInputPanel
                   ref={inputRef}
                   initialMode={initialMode}
@@ -260,9 +266,9 @@ export default function TranslationScreen({
                 >
                   <SignChips signs={displaySigns} activeIndex={activeIndex} />
                 </OutputCard>
-              </div>
+              </AppPageStagger>
 
-              <div className="lg:col-span-7">
+              <div className="animate-motion-scale-in lg:col-span-7">
                 <div
                   className={
                     'relative flex h-full flex-col overflow-hidden rounded-[2rem] border-[3px] p-5 shadow-[0_24px_50px_-28px_rgba(148,208,142,0.7)] sm:p-7 ' +
@@ -333,14 +339,13 @@ export default function TranslationScreen({
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
+        </AppPagePanel>
+      </AppPageMain>
 
-      <footer className="border-t border-pastel-ink/10 px-6 py-5 text-center">
+      <AppPageFooter>
         <p className="text-xs text-pastel-sub">Traducción en tiempo real · voz o texto a lengua de señas</p>
-      </footer>
-    </div>
+      </AppPageFooter>
+    </AppPage>
   )
 }
 
@@ -368,7 +373,7 @@ function OutputCard({ color, icon, title, empty, emptyIcon, hasContent, children
     : 'border-pastel-ink/10 bg-white'
 
   return (
-    <div className={'rounded-[1.5rem] border-2 p-4 shadow-[0_14px_30px_-24px_rgba(45,42,38,0.35)] sm:p-5 ' + border}>
+    <div className={'motion-surface rounded-[1.5rem] border-2 p-4 shadow-[0_14px_30px_-24px_rgba(45,42,38,0.35)] sm:p-5 ' + border}>
       <div className="flex items-center gap-2.5">
         <span className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-pastel-ink/10 bg-pastel-cream text-pastel-ink [&>svg]:h-4 [&>svg]:w-4">
           {icon}

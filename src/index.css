@@ -56,6 +56,124 @@ body {
            shadow-[0_30px_70px_-40px_rgba(45,42,38,0.55)];
   }
 
+  /* Barra fija tipo Apple: vidrio esmerilado + saturación */
+  .landing-nav-glass {
+    @apply fixed inset-x-0 top-0 z-50;
+    background-color: rgba(247, 243, 234, 0.62);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid rgba(45, 42, 38, 0.08);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) inset;
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .landing-nav-glass {
+      background-color: rgba(247, 243, 234, 0.94);
+    }
+  }
+
+  /* Capa modal: blur tipo Apple, sin oscurecer fuerte */
+  .modal-backdrop-glass {
+    background-color: rgba(247, 243, 234, 0.35);
+    -webkit-backdrop-filter: saturate(180%) blur(24px);
+    backdrop-filter: saturate(180%) blur(24px);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .modal-backdrop-glass {
+      background-color: rgba(247, 243, 234, 0.88);
+    }
+  }
+
+  /* Material Motion — interacción y listas escalonadas */
+  .motion-press {
+    transition:
+      transform 0.2s cubic-bezier(0.2, 0, 0, 1),
+      box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1),
+      filter 0.2s cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .motion-press:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .motion-surface {
+    transition:
+      transform 0.35s cubic-bezier(0.05, 0.7, 0.1, 1),
+      box-shadow 0.35s cubic-bezier(0.05, 0.7, 0.1, 1);
+  }
+
+  .motion-stagger > * {
+    animation: motion-enter 0.55s cubic-bezier(0.05, 0.7, 0.1, 1) both;
+  }
+
+  .motion-stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .motion-stagger > *:nth-child(2) { animation-delay: 70ms; }
+  .motion-stagger > *:nth-child(3) { animation-delay: 140ms; }
+  .motion-stagger > *:nth-child(4) { animation-delay: 210ms; }
+  .motion-stagger > *:nth-child(5) { animation-delay: 280ms; }
+  .motion-stagger > *:nth-child(6) { animation-delay: 350ms; }
+
+  .motion-stagger-exit-host .motion-stagger > *,
+  .motion-exit-host .motion-stagger > * {
+    animation: motion-stagger-out 0.28s cubic-bezier(0.3, 0, 0.8, 0.15) both;
+  }
+
+  .motion-stagger-exit-host .motion-stagger > *:nth-child(1),
+  .motion-exit-host .motion-stagger > *:nth-child(1) { animation-delay: 210ms; }
+  .motion-stagger-exit-host .motion-stagger > *:nth-child(2),
+  .motion-exit-host .motion-stagger > *:nth-child(2) { animation-delay: 140ms; }
+  .motion-stagger-exit-host .motion-stagger > *:nth-child(3),
+  .motion-exit-host .motion-stagger > *:nth-child(3) { animation-delay: 70ms; }
+  .motion-stagger-exit-host .motion-stagger > *:nth-child(n+4),
+  .motion-exit-host .motion-stagger > *:nth-child(n+4) { animation-delay: 0ms; }
+
+  .motion-exit-host .animate-motion-enter,
+  .motion-exit-host .animate-motion-scale-in,
+  .motion-exit-host .animate-fade-up,
+  .motion-exit-host .pastel-panel {
+    animation: motion-exit 0.3s cubic-bezier(0.3, 0, 0.8, 0.15) both;
+  }
+
+  .motion-exit-host .animate-motion-scale-in,
+  .motion-exit-host .pastel-panel {
+    animation-name: motion-scale-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .motion-stagger > *,
+    .motion-stagger-exit-host .motion-stagger > *,
+    .motion-exit-host .motion-stagger > *,
+    .motion-exit-host .animate-motion-enter,
+    .motion-exit-host .animate-motion-scale-in,
+    .motion-exit-host .animate-fade-up,
+    .motion-exit-host .pastel-panel,
+    .animate-motion-enter,
+    .animate-motion-enter-forward,
+    .animate-motion-enter-back,
+    .animate-motion-scale-in,
+    .animate-motion-scale-out,
+    .animate-motion-modal-in,
+    .animate-motion-modal-out,
+    .animate-motion-modal-backdrop,
+    .animate-motion-modal-backdrop-out,
+    .animate-motion-fade-through,
+    .animate-motion-exit,
+    .animate-motion-exit-forward,
+    .animate-motion-exit-back,
+    .animate-motion-exit-fade-through,
+    .animate-motion-slide-up,
+    .animate-motion-slide-down,
+    .animate-motion-stagger-out,
+    .animate-fade-up {
+      animation: none !important;
+    }
+
+    .motion-press:active:not(:disabled) {
+      transform: none;
+    }
+  }
+
   .gradient-text {
     @apply bg-clip-text text-transparent;
     background-image: linear-gradient(90deg, #7E64C9 0%, #BCA4E6 100%);
@@ -63,7 +181,7 @@ body {
 
   .btn-primary,
   .btn-pastel {
-    @apply inline-flex items-center justify-center gap-2 rounded-full
+    @apply motion-press inline-flex items-center justify-center gap-2 rounded-full
            bg-pastel-grape px-6 py-2.5 text-sm font-bold text-white
            shadow-[0_8px_20px_-6px_rgba(126,100,201,0.6)]
            transition hover:scale-[1.03] hover:brightness-105
@@ -72,7 +190,7 @@ body {
   }
 
   .btn-pastel-soft {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl
+    @apply motion-press inline-flex items-center justify-center gap-2 rounded-2xl
            bg-pastel-purple px-6 py-3 text-sm font-bold text-pastel-grape
            ring-2 ring-pastel-purple-line
            shadow-[0_14px_30px_-12px_rgba(126,100,201,0.7)]

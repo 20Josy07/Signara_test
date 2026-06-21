@@ -1,16 +1,24 @@
 import { SectionLabel } from './AppShell.jsx'
+import {
+  AppPage,
+  AppPageFooter,
+  AppPageHeader,
+  AppPageHeading,
+  AppPageMain,
+  AppPagePanel,
+  AppPageStagger,
+} from './PageMotion.jsx'
 
 /**
  * ModeSelection — elección entre Traducir e Interpretar.
  */
 export default function ModeSelection({ onSelect, onBack }) {
   return (
-    <div className="landing-page-bg relative min-h-screen font-display text-pastel-ink">
-      <header className="sticky top-0 z-50 border-b border-pastel-ink/10 bg-pastel-cream/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 md:px-8">
+    <AppPage>
+      <AppPageHeader>
           <button
             onClick={onBack}
-            className="inline-flex items-center gap-2 rounded-full border-2 border-pastel-ink/15 bg-white px-4 py-2.5 text-sm font-bold text-pastel-ink transition hover:border-pastel-purple-line hover:bg-pastel-purple/30 focus:outline-none focus:ring-4 focus:ring-pastel-purple"
+            className="inline-flex items-center gap-2 rounded-full border-2 border-pastel-ink/15 bg-white px-4 py-2.5 text-sm font-bold text-pastel-ink transition hover:border-pastel-purple-line hover:bg-pastel-purple/30 focus:outline-none focus:ring-4 focus:ring-pastel-purple motion-press"
           >
             <BackIcon />
             Inicio
@@ -19,13 +27,11 @@ export default function ModeSelection({ onSelect, onBack }) {
             Signara
           </span>
           <div className="w-[88px]" aria-hidden="true" />
-        </div>
-      </header>
+      </AppPageHeader>
 
-      <section className="px-4 pb-16 pt-6 md:px-6 md:pt-10">
-        <div className="relative mx-auto max-w-5xl">
-          <div className="rounded-[2.5rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] px-6 py-10 shadow-[0_30px_70px_-40px_rgba(45,42,38,0.55)] md:px-12 md:py-14">
-            <div className="mx-auto max-w-2xl text-center animate-fade-up">
+      <AppPageMain>
+        <AppPagePanel>
+            <div className="mx-auto max-w-2xl animate-motion-enter text-center">
               <SectionLabel color="purple">Paso 1</SectionLabel>
               <h1 className="mt-6 text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-5xl md:text-[3.4rem]">
                 Elige cómo quieres{' '}
@@ -38,7 +44,7 @@ export default function ModeSelection({ onSelect, onBack }) {
               </p>
             </div>
 
-            <div className="mt-12 grid grid-cols-1 gap-6 animate-fade-up md:grid-cols-2 md:gap-8">
+            <AppPageStagger className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8">
               <ModeCard
                 number="01"
                 color="green"
@@ -63,9 +69,9 @@ export default function ModeSelection({ onSelect, onBack }) {
                 cta="Empezar a interpretar"
                 onClick={() => onSelect('interpret')}
               />
-            </div>
+            </AppPageStagger>
 
-            <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2 md:mt-12">
+            <AppPageStagger className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2 md:mt-12">
               <HintBlock
                 color="green"
                 title="¿Quieres explicarte a alguien sordo?"
@@ -76,11 +82,14 @@ export default function ModeSelection({ onSelect, onBack }) {
                 title="¿Quieres entender señas?"
                 text="Usa Interpretar: señas con la cámara, texto en pantalla."
               />
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
+            </AppPageStagger>
+        </AppPagePanel>
+      </AppPageMain>
+
+      <AppPageFooter>
+        <p className="text-xs text-pastel-sub">Elige un modo para continuar</p>
+      </AppPageFooter>
+    </AppPage>
   )
 }
 
@@ -118,7 +127,7 @@ function ModeCard({
     <button
       onClick={onClick}
       className={
-        'group relative flex min-h-[420px] flex-col overflow-hidden rounded-[2rem] border-[3px] p-7 text-left shadow-[0_20px_44px_-28px_rgba(45,42,38,0.5)] transition duration-300 hover:-translate-y-2 focus:outline-none focus:ring-4 focus:ring-pastel-ink/15 md:p-8 ' +
+        'group motion-surface relative flex min-h-[420px] flex-col overflow-hidden rounded-[2rem] border-[3px] p-7 text-left shadow-[0_20px_44px_-28px_rgba(45,42,38,0.5)] hover:-translate-y-2 focus:outline-none focus:ring-4 focus:ring-pastel-ink/15 md:p-8 ' +
         s.card
       }
     >
@@ -186,7 +195,7 @@ function ModeCard({
 function HintBlock({ color, title, text }) {
   const border = color === 'green' ? 'border-pastel-green-line bg-pastel-green/60' : 'border-pastel-blue-line bg-pastel-blue/60'
   return (
-    <div className={'rounded-2xl border-2 px-5 py-4 ' + border}>
+    <div className={'motion-surface rounded-2xl border-2 px-5 py-4 ' + border}>
       <p className="text-sm font-extrabold text-pastel-ink">{title}</p>
       <p className="mt-1 text-sm font-semibold text-pastel-ink/70">{text}</p>
     </div>

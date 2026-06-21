@@ -10,10 +10,15 @@ export default function LandingScreen({ onStart }) {
   const [activeNav, setActiveNav] = useState('inicio')
 
   return (
-    <div className="landing-page-bg relative min-h-screen font-display text-pastel-ink">
-      {/* ── Header fijo (fuera del recuadro) ── */}
-      <header className="sticky top-0 z-50 border-b border-pastel-ink/10 bg-pastel-cream/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 md:px-8">
+    <div className="landing-page-bg motion-page relative min-h-screen font-display text-pastel-ink">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        <div className="absolute -left-24 top-32 h-64 w-64 rounded-full bg-pastel-purple/25 blur-3xl" />
+        <div className="absolute -right-20 top-[45%] h-56 w-56 rounded-full bg-pastel-green/20 blur-3xl" />
+        <div className="absolute bottom-32 left-1/3 h-48 w-48 rounded-full bg-pastel-blue/20 blur-3xl" />
+      </div>
+
+      <header className="landing-nav-glass">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3.5 md:px-6">
           <a
             href="#inicio"
             onClick={() => setActiveNav('inicio')}
@@ -21,77 +26,72 @@ export default function LandingScreen({ onStart }) {
           >
             Signara
           </a>
-          <nav className="hidden items-center gap-2 md:flex">
+          <nav className="hidden items-center gap-6 md:flex" aria-label="Secciones">
             {NAV.map(({ id, label, href }) => (
               <a
                 key={id}
                 href={href}
                 onClick={() => setActiveNav(id)}
                 className={
-                  'rounded-full border-2 px-4 py-2 text-sm font-bold transition ' +
+                  'text-sm font-bold transition ' +
                   (activeNav === id
-                    ? 'border-pastel-purple-line bg-pastel-purple text-pastel-grape'
-                    : 'border-pastel-ink/15 bg-white text-pastel-sub hover:text-pastel-ink')
+                    ? 'text-pastel-grape underline decoration-pastel-purple-line decoration-2 underline-offset-4'
+                    : 'text-pastel-sub hover:text-pastel-ink')
                 }
               >
                 {label}
               </a>
             ))}
           </nav>
-          <button
-            onClick={onStart}
-            className="rounded-full bg-pastel-grape px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_-6px_rgba(126,100,201,0.6)] transition hover:scale-[1.03] hover:brightness-105 focus:outline-none focus:ring-4 focus:ring-pastel-purple"
-          >
+          <button onClick={onStart} className="btn-pastel px-5 py-2.5">
             Probar
           </button>
         </div>
       </header>
 
-      {/* ── Hero (panel estilo "Welcome") ── */}
-      <section id="inicio" className="scroll-mt-20 px-4 pt-6 md:px-6 md:pt-8">
-        <div className="mx-auto max-w-6xl rounded-[2.5rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] p-6 shadow-[0_30px_70px_-40px_rgba(45,42,38,0.55)] md:p-10">
-          {/* contenido en 2 columnas */}
-          <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-8">
-            {/* izquierda */}
+      <main className="relative pt-[4.25rem] md:pt-[4.5rem]">
+      <section id="inicio" className="scroll-mt-20 px-4 pt-8 md:px-6 md:pt-12">
+        <div className="pastel-panel mx-auto max-w-6xl p-6 motion-surface md:p-10">
+          <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-10">
             <div className="animate-fade-up">
-              <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl">
+              <SectionLabel color="purple">Accesibilidad · Lengua de señas</SectionLabel>
+              <h1 className="mt-5 text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl">
                 Comunícate <br className="hidden sm:block" />
                 sin <Pill color="purple">barreras</Pill>
               </h1>
-              <p className="mt-5 text-xs font-bold uppercase tracking-[0.2em] text-pastel-grape">
-                Lengua de señas para todos
-              </p>
-              <div className="mt-5 max-w-md space-y-4 text-sm leading-relaxed text-pastel-sub md:text-base">
+              <div className="mt-5 max-w-md space-y-3 text-sm leading-relaxed text-pastel-sub md:text-base">
                 <p>
                   Signara traduce tu voz y tu texto a lengua de señas con un avatar, e interpreta
                   señas con la cámara en tiempo real.
                 </p>
-                <p>
-                  Creemos que la comunicación debe ser accesible para todos.
-                </p>
+                <p>Creemos que la comunicación debe ser accesible para todos.</p>
               </div>
-              <button
-                onClick={onStart}
-                className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-pastel-purple px-7 py-4 text-sm font-bold text-pastel-grape shadow-[0_14px_30px_-12px_rgba(126,100,201,0.7)] ring-2 ring-pastel-purple-line transition hover:scale-[1.03] hover:brightness-[1.02] focus:outline-none focus:ring-4 focus:ring-pastel-purple"
-              >
-                Empezar ahora
-                <ArrowRightIcon />
-              </button>
-              <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-semibold text-pastel-sub">
-                <span className="inline-flex items-center gap-1.5 [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:text-pastel-green-line">
-                  <CheckIcon /> Tiempo real
-                </span>
-                <span className="inline-flex items-center gap-1.5 [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:text-pastel-green-line">
-                  <CheckIcon /> Sin registro
-                </span>
-                <span className="inline-flex items-center gap-1.5 [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:text-pastel-green-line">
-                  <CheckIcon /> En tu navegador
-                </span>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <button onClick={onStart} className="btn-pastel-soft px-7 py-4">
+                  Empezar ahora
+                  <ArrowRightIcon />
+                </button>
+                <a
+                  href="#funciones"
+                  className="btn-pastel-ghost hidden sm:inline-flex"
+                >
+                  Ver funciones
+                </a>
+              </div>
+              <div className="mt-6 flex flex-wrap gap-2">
+                {['Tiempo real', 'Sin registro', 'En tu navegador'].map((item) => (
+                  <span
+                    key={item}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-pastel-ink/10 bg-white/90 px-3 py-1.5 text-xs font-semibold text-pastel-sub shadow-sm [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:text-pastel-green-line"
+                  >
+                    <CheckIcon />
+                    {item}
+                  </span>
+                ))}
               </div>
             </div>
 
-            {/* derecha: pila de tarjetas */}
-            <div className="relative">
+            <div className="relative animate-fade-up [animation-delay:120ms]">
               <SmileySticker className="-top-3 right-0 hidden lg:flex" />
               <div className="mb-5 flex items-center gap-2 text-sm font-bold text-pastel-ink">
                 ¿Qué resuelve Signara?
@@ -103,40 +103,45 @@ export default function LandingScreen({ onStart }) {
         </div>
       </section>
 
+      <SectionSeparator color="purple" />
+
       {/* ── Impacto ── */}
-      <section className="px-4 py-10 md:px-6">
-        <div className="mx-auto max-w-6xl rounded-[2rem] border-2 border-pastel-purple-line bg-pastel-purple/50 px-8 py-12 text-center md:px-14">
-          <p className="text-5xl font-extrabold text-pastel-grape md:text-6xl">+70 millones</p>
-          <p className="mx-auto mt-4 max-w-2xl text-base font-bold text-pastel-ink md:text-lg">
+      <section className="px-4 py-14 md:px-6 md:py-20">
+        <div className="mx-auto max-w-6xl animate-motion-scale-in text-center">
+          <SectionLabel color="purple">El impacto</SectionLabel>
+          <p className="mt-6 text-5xl font-extrabold tracking-tight md:text-7xl">
+            <span className="gradient-text">+70 millones</span>
+          </p>
+          <p className="mx-auto mt-4 max-w-2xl text-base font-bold text-pastel-ink md:text-xl">
             de personas en el mundo se comunican con lengua de señas.
           </p>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-pastel-sub">
+          <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-pastel-sub md:text-base">
             La mayoría de quienes oyen no la conocen. Signara construye ese puente entre los dos
             mundos.
           </p>
-          <p className="mt-5 text-[11px] uppercase tracking-wider text-pastel-sub/70">
+          <p className="mt-6 text-[11px] uppercase tracking-wider text-pastel-sub/60">
             Fuente: Federación Mundial de Personas Sordas
           </p>
         </div>
       </section>
 
+      <SectionSeparator color="green" />
+
       {/* ── Funciones ── */}
-      <section id="funciones" className="scroll-mt-24 px-6 py-20 md:px-10 md:py-24">
-        <div className="mx-auto max-w-5xl">
-          <div className="relative flex flex-col items-start gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <SectionLabel color="green">Funciones</SectionLabel>
-              <h2 className="mt-5 max-w-xl text-3xl font-extrabold leading-tight md:text-[2.6rem]">
-                Todo lo que Signara hace por ti
-              </h2>
-            </div>
-            <p className="max-w-xs text-sm leading-relaxed text-pastel-sub">
-              Dos formas de comunicarte y un avatar que da vida a cada seña, en tiempo real.
-            </p>
-            <SmileySticker className="-top-6 right-0 hidden md:block" />
+      <section id="funciones" className="scroll-mt-24 px-4 py-14 md:px-6 md:py-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+            <SectionHeading
+              align="left"
+              label="Funciones"
+              labelColor="green"
+              title="Todo lo que Signara hace por ti"
+              subtitle="Dos formas de comunicarte y un avatar que da vida a cada seña, en tiempo real."
+            />
+            <SmileySticker className="-top-8 right-0 hidden md:block" />
           </div>
 
-          <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="motion-stagger mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
             <FeatureCard
               color="green"
               tag="Voz y texto"
@@ -165,16 +170,17 @@ export default function LandingScreen({ onStart }) {
         </div>
       </section>
 
+      <SectionSeparator color="yellow" />
+
       {/* ── Caso de uso (antes vs con) ── */}
-      <section className="px-6 py-16 md:px-10 md:py-20">
-        <div className="mx-auto max-w-5xl">
-          <div className="text-center">
-            <SectionLabel color="yellow">El cambio</SectionLabel>
-            <h2 className="mt-5 text-3xl font-extrabold md:text-[2.6rem]">
-              De la barrera a la conversación
-            </h2>
-          </div>
-          <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2">
+      <section className="px-4 py-14 md:px-6 md:py-20">
+        <div className="mx-auto max-w-6xl">
+          <SectionHeading
+            label="El cambio"
+            labelColor="yellow"
+            title="De la barrera a la conversación"
+          />
+          <div className="motion-stagger mt-12 grid grid-cols-1 items-stretch gap-6 md:grid-cols-[1fr_auto_1fr] md:gap-5">
             <CompareCard
               variant="before"
               title="Sin Signara"
@@ -184,6 +190,11 @@ export default function LandingScreen({ onStart }) {
                 'La comunicación se vuelve lenta y frustrante',
               ]}
             />
+            <div className="hidden items-center justify-center md:flex">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-pastel-purple-line bg-white text-pastel-grape shadow-sm">
+                <ArrowRightIcon />
+              </span>
+            </div>
             <CompareCard
               variant="after"
               title="Con Signara"
@@ -197,64 +208,82 @@ export default function LandingScreen({ onStart }) {
         </div>
       </section>
 
-      {/* ── Por qué Signara + confianza ── */}
-      <section className="px-6 py-16 md:px-10 md:py-20">
-        <div className="mx-auto max-w-5xl">
-          <div className="text-center">
-            <SectionLabel color="blue">Por qué Signara</SectionLabel>
-            <h2 className="mt-5 text-3xl font-extrabold md:text-[2.6rem]">Hecho para que empieces ya</h2>
-          </div>
-          <div className="mt-12 grid grid-cols-2 gap-4 md:grid-cols-4">
-            <TrustBadge icon={<BoltIcon />} title="Tiempo real" description="Traduce e interpreta al instante." />
-            <TrustBadge icon={<CheckIcon />} title="Sin registro" description="Entra y úsalo al momento." />
-            <TrustBadge icon={<GlobeIcon />} title="En tu navegador" description="Nada que instalar." />
-            <TrustBadge icon={<CodeIcon />} title="Código abierto" description="Transparente y comunitario." />
+      <SectionSeparator color="blue" />
+
+      {/* ── Por qué Signara ── */}
+      <section className="px-4 py-14 md:px-6 md:py-20">
+        <div className="mx-auto max-w-6xl">
+          <SectionHeading
+            label="Por qué Signara"
+            labelColor="blue"
+            title="Hecho para que empieces ya"
+          />
+          <div className="motion-stagger mt-12 grid grid-cols-2 gap-4 md:grid-cols-4">
+            <TrustBadge color="purple" icon={<BoltIcon />} title="Tiempo real" description="Traduce e interpreta al instante." />
+            <TrustBadge color="green" icon={<CheckIcon />} title="Sin registro" description="Entra y úsalo al momento." />
+            <TrustBadge color="blue" icon={<GlobeIcon />} title="En tu navegador" description="Nada que instalar." />
+            <TrustBadge color="yellow" icon={<CodeIcon />} title="Código abierto" description="Transparente y comunitario." />
           </div>
         </div>
       </section>
 
-      {/* ── Cómo funciona ── */}
-      <section id="como-funciona" className="scroll-mt-24 px-6 pb-24 pt-4 md:px-10 md:pb-32">
-        <div className="mx-auto max-w-5xl">
-          <div className="text-center">
-            <SectionLabel color="purple">Cómo funciona</SectionLabel>
-            <h2 className="mt-5 text-3xl font-extrabold md:text-[2.6rem]">Empieza en 3 pasos</h2>
-          </div>
+      <SectionSeparator color="purple" />
 
-          <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
+      {/* ── Cómo funciona ── */}
+      <section id="como-funciona" className="scroll-mt-24 px-4 py-14 md:px-6 md:py-20">
+        <div className="mx-auto max-w-6xl">
+          <SectionHeading
+            label="Cómo funciona"
+            labelColor="purple"
+            title="Empieza en 3 pasos"
+          />
+
+          <div className="motion-stagger relative mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
+            <div
+              className="pointer-events-none absolute left-[18%] right-[18%] top-6 hidden h-px border-t-2 border-dashed border-pastel-ink/12 md:block"
+              aria-hidden="true"
+            />
             <StepCard color="green" number="01" title="Elige tu modo" description="Traducir o interpretar, según lo que necesites." />
             <StepCard color="blue" number="02" title="Interactúa" description="Escribe, habla o usa la cámara para empezar." />
             <StepCard color="purple" number="03" title="Conecta" description="Comunicación sin barreras con quien quieras." />
           </div>
-
         </div>
       </section>
 
+      <SectionSeparator color="purple" />
+
       {/* ── CTA final ── */}
-      <section className="px-4 pb-16 md:px-6">
-        <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] border-2 border-pastel-purple-line bg-pastel-purple px-8 py-16 text-center md:px-14 md:py-20">
-          <HeartSticker className="left-[12%] top-10 hidden rotate-[-12deg] md:block" />
-          <HeartSticker className="bottom-12 right-[14%] hidden rotate-[14deg] md:block" small />
-          <h2 className="mx-auto max-w-2xl text-3xl font-extrabold leading-tight text-pastel-ink md:text-5xl">
+      <section className="px-4 pb-20 md:px-6">
+        <div className="relative mx-auto max-w-6xl animate-motion-scale-in overflow-hidden rounded-[2.5rem] border-2 border-pastel-purple-line/50 bg-gradient-to-br from-pastel-purple/70 via-pastel-purple/45 to-pastel-blue/30 px-8 py-16 text-center shadow-[0_24px_50px_-28px_rgba(126,100,201,0.35)] md:px-14 md:py-20">
+          <div className="pointer-events-none absolute -left-16 -top-16 h-48 w-48 rounded-full bg-white/20 blur-2xl" aria-hidden="true" />
+          <div className="pointer-events-none absolute -bottom-12 -right-12 h-40 w-40 rounded-full bg-pastel-grape/15 blur-2xl" aria-hidden="true" />
+          <HeartSticker className="left-[10%] top-8 hidden rotate-[-12deg] md:block" />
+          <HeartSticker className="bottom-10 right-[12%] hidden rotate-[14deg] md:block" small />
+          <h2 className="relative mx-auto max-w-2xl text-3xl font-extrabold leading-tight text-pastel-ink md:text-5xl">
             Empieza a comunicarte sin barreras hoy
           </h2>
-          <p className="mx-auto mt-5 max-w-md text-sm font-semibold text-pastel-grape md:text-base">
+          <p className="relative mx-auto mt-5 max-w-md text-sm font-semibold text-pastel-grape md:text-base">
             Sin registro y directo en tu navegador.
           </p>
-          <button
-            onClick={onStart}
-            className="mt-9 inline-flex items-center gap-2 rounded-full bg-pastel-grape px-9 py-4 text-base font-bold text-white shadow-[0_16px_36px_-12px_rgba(126,100,201,0.85)] transition hover:scale-[1.03] hover:brightness-105 focus:outline-none focus:ring-4 focus:ring-white/50"
-          >
+          <button onClick={onStart} className="btn-pastel relative mt-9 px-9 py-4 text-base">
             Probar Signara
             <ArrowRightIcon />
           </button>
         </div>
       </section>
+      </main>
 
-      <footer className="border-t border-pastel-ink/10 px-6 py-8 text-center">
-        <p className="text-xs text-pastel-sub">
-          © {new Date().getFullYear()} Signara — hecho con accesibilidad en mente
-        </p>
+      <footer className="relative border-t border-pastel-ink/10 bg-pastel-ink/[0.04] px-4 py-10 md:px-6">
+        <div className="mx-auto max-w-6xl text-center">
+          <p className="text-base font-extrabold text-pastel-grape">Signara</p>
+          <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-pastel-sub">
+            Traducción e interpretación de lengua de señas, accesible desde el navegador.
+          </p>
+          <div className="mx-auto mt-5 h-px max-w-xs bg-pastel-ink/10" aria-hidden="true" />
+          <p className="mt-5 text-[11px] text-pastel-sub/70">
+            © {new Date().getFullYear()} Signara · Hecho con accesibilidad en mente
+          </p>
+        </div>
       </footer>
     </div>
   )
@@ -301,11 +330,54 @@ function SectionLabel({ color, children }) {
   )
 }
 
+const SEPARATOR_ACCENTS = {
+  purple: 'bg-pastel-purple-line/35',
+  green: 'bg-pastel-green-line/35',
+  yellow: 'bg-pastel-yellow-line/35',
+  blue: 'bg-pastel-blue-line/35',
+}
+
+function SectionSeparator({ color = 'purple' }) {
+  return (
+    <div
+      className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2 md:gap-4 md:px-6"
+      aria-hidden="true"
+    >
+      <div className="h-px flex-1 bg-pastel-ink/8" />
+      <div
+        className={
+          'h-1 w-12 shrink-0 rounded-full md:w-16 ' +
+          (SEPARATOR_ACCENTS[color] || SEPARATOR_ACCENTS.purple)
+        }
+      />
+      <div className="h-px flex-1 bg-pastel-ink/8" />
+    </div>
+  )
+}
+
+function SectionHeading({ label, labelColor, title, subtitle, align = 'center' }) {
+  const alignClass = align === 'left' ? 'text-left' : 'mx-auto text-center'
+
+  return (
+    <div className={'max-w-2xl ' + alignClass}>
+      {label && <SectionLabel color={labelColor}>{label}</SectionLabel>}
+      <h2 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight md:text-[2.6rem]">
+        {title}
+      </h2>
+      {subtitle && (
+        <p className="mt-4 max-w-xl text-sm leading-relaxed text-pastel-sub md:text-base">
+          {subtitle}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /* ── Tarjeta de función (estilo "teacher card" del mosaico) ── */
 const CARD_COLORS = {
-  green: 'border-pastel-green-line bg-pastel-green/40',
-  blue: 'border-pastel-blue-line bg-pastel-blue/40',
-  purple: 'border-pastel-purple-line bg-pastel-purple/40',
+  green: 'border-pastel-green-line/70 bg-white hover:bg-pastel-green/25',
+  blue: 'border-pastel-blue-line/70 bg-white hover:bg-pastel-blue/25',
+  purple: 'border-pastel-purple-line/70 bg-white hover:bg-pastel-purple/25',
 }
 
 const CARD_TAG_COLORS = {
@@ -325,7 +397,7 @@ function FeatureCard({ color, tag, title, description, icon, onStart }) {
     <button
       onClick={onStart}
       className={
-        'group flex h-full flex-col rounded-[1.75rem] border-2 p-7 text-left shadow-[0_16px_36px_-22px_rgba(45,42,38,0.45)] transition hover:-translate-y-1.5 hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-pastel-ink/10 ' +
+        'group motion-surface flex h-full flex-col rounded-[1.75rem] border-2 p-7 text-left shadow-[0_12px_28px_-20px_rgba(45,42,38,0.35)] hover:-translate-y-1 hover:shadow-[0_20px_40px_-18px_rgba(45,42,38,0.4)] focus:outline-none focus:ring-4 focus:ring-pastel-ink/10 ' +
         CARD_COLORS[color]
       }
     >
@@ -369,7 +441,7 @@ const STEP_BADGE_COLORS = {
 
 function StepCard({ color, number, title, description }) {
   return (
-    <div className="rounded-[1.75rem] border-2 border-pastel-ink/10 bg-white p-7 shadow-[0_16px_36px_-22px_rgba(45,42,38,0.35)]">
+    <div className="motion-surface relative rounded-[1.75rem] border-2 border-pastel-ink/10 bg-white p-7 shadow-[0_12px_28px_-20px_rgba(45,42,38,0.3)] hover:-translate-y-0.5 hover:shadow-[0_18px_36px_-18px_rgba(45,42,38,0.35)]">
       <span
         className={
           'flex h-12 w-12 items-center justify-center rounded-2xl border-2 bg-pastel-cream text-lg font-extrabold ' +
@@ -499,7 +571,7 @@ function CompareCard({ variant, title, items }) {
     <div
       className={
         'rounded-[1.75rem] border-2 p-7 shadow-[0_16px_36px_-26px_rgba(45,42,38,0.4)] ' +
-        (before ? 'border-pastel-ink/10 bg-white' : 'border-pastel-green-line bg-pastel-green/40')
+        (before ? 'border-pastel-ink/10 bg-white' : 'border-pastel-green-line/70 bg-pastel-green/25')
       }
     >
       <h3 className="text-lg font-extrabold text-pastel-ink">{title}</h3>
@@ -522,11 +594,23 @@ function CompareCard({ variant, title, items }) {
   )
 }
 
+const TRUST_ICON_BG = {
+  purple: 'bg-pastel-purple/50 border-pastel-purple-line/50',
+  green: 'bg-pastel-green/50 border-pastel-green-line/50',
+  blue: 'bg-pastel-blue/50 border-pastel-blue-line/50',
+  yellow: 'bg-pastel-yellow/50 border-pastel-yellow-line/50',
+}
+
 /* ── Señal de confianza ── */
-function TrustBadge({ icon, title, description }) {
+function TrustBadge({ color = 'blue', icon, title, description }) {
   return (
-    <div className="rounded-2xl border-2 border-pastel-ink/10 bg-white p-5 text-center shadow-[0_14px_30px_-24px_rgba(45,42,38,0.4)]">
-      <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-pastel-blue/50 text-pastel-ink [&>svg]:h-5 [&>svg]:w-5">
+    <div className="motion-surface rounded-2xl border-2 border-pastel-ink/10 bg-white p-5 text-center shadow-[0_12px_28px_-22px_rgba(45,42,38,0.35)] hover:-translate-y-0.5">
+      <span
+        className={
+          'mx-auto flex h-11 w-11 items-center justify-center rounded-2xl border text-pastel-ink [&>svg]:h-5 [&>svg]:w-5 ' +
+          (TRUST_ICON_BG[color] || TRUST_ICON_BG.blue)
+        }
+      >
         {icon}
       </span>
       <h3 className="mt-3 text-sm font-extrabold text-pastel-ink">{title}</h3>
@@ -565,21 +649,6 @@ function CodeIcon() {
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13 6l-2 12" />
     </svg>
-  )
-}
-
-function ScrollIndicator() {
-  return (
-    <a
-      href="#funciones"
-      className="mt-auto flex flex-col items-center gap-2 pt-12 text-pastel-sub/70 transition hover:text-pastel-ink"
-      aria-label="Desplazarse hacia abajo"
-    >
-      <svg width="28" height="44" viewBox="0 0 28 44" fill="none" className="opacity-80">
-        <rect x="1" y="1" width="26" height="42" rx="13" stroke="currentColor" strokeWidth="2" />
-        <rect x="12" y="10" width="4" height="8" rx="2" fill="currentColor" className="animate-bounce" />
-      </svg>
-    </a>
   )
 }
 

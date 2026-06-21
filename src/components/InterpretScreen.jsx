@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { ResetButton, SectionLabel } from './AppShell.jsx'
+import {
+  AppPage,
+  AppPageFooter,
+  AppPageHeader,
+  AppPageHeading,
+  AppPageMain,
+  AppPagePanel,
+  AppPageStagger,
+} from './PageMotion.jsx'
 
 const MEDIAPIPE_HOLISTIC_VER = '0.5.1675471629'
 const MEDIAPIPE_CAM_VER      = '0.3.1675466862'
@@ -466,12 +475,11 @@ export default function InterpretScreen({ onBack, onHome }) {
   const confPct = latest ? Math.round((latest.confidence || 0) * 100) : 0
 
   return (
-    <div className="landing-page-bg relative min-h-screen font-display text-pastel-ink">
-      <header className="sticky top-0 z-50 border-b border-pastel-ink/10 bg-pastel-cream/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:px-6 md:px-8">
+    <AppPage>
+      <AppPageHeader>
           <button
             onClick={onBack}
-            className="inline-flex items-center gap-2 rounded-full border-2 border-pastel-ink/15 bg-white px-4 py-2 text-sm font-bold text-pastel-ink transition hover:border-pastel-purple-line hover:bg-pastel-purple/30 focus:outline-none focus:ring-4 focus:ring-pastel-purple"
+            className="motion-press inline-flex items-center gap-2 rounded-full border-2 border-pastel-ink/15 bg-white px-4 py-2 text-sm font-bold text-pastel-ink transition hover:border-pastel-purple-line hover:bg-pastel-purple/30 focus:outline-none focus:ring-4 focus:ring-pastel-purple"
           >
             <BackIcon />
             <span className="hidden sm:inline">Cambiar modo</span>
@@ -485,14 +493,11 @@ export default function InterpretScreen({ onBack, onHome }) {
           </button>
 
           <ResetButton onClick={handleReset} />
-        </div>
-      </header>
+      </AppPageHeader>
 
-      <section className="px-4 pb-12 pt-5 sm:px-6 md:pt-7">
-        <div className="mx-auto max-w-6xl">
-          <div className="rounded-[2.5rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] px-5 py-7 shadow-[0_30px_70px_-40px_rgba(45,42,38,0.55)] sm:px-8 sm:py-9 md:px-10">
-            {/* Cabecera */}
-            <div className="flex flex-col gap-4 border-b-2 border-pastel-ink/10 pb-7 animate-fade-up lg:flex-row lg:items-end lg:justify-between">
+      <AppPageMain>
+        <AppPagePanel>
+            <AppPageHeading>
               <div>
                 <SectionLabel color="blue">Interpretar</SectionLabel>
                 <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
@@ -506,7 +511,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <AppPageStagger className="flex flex-wrap gap-2">
                 <MlStatusPill
                   mlMode={mlMode}
                   mlConnecting={mlConnecting}
@@ -521,12 +526,11 @@ export default function InterpretScreen({ onBack, onHome }) {
                 {history.length > 0 && (
                   <StatusPill variant="count">{history.length} detectadas</StatusPill>
                 )}
-              </div>
-            </div>
+              </AppPageStagger>
+            </AppPageHeading>
 
-            <div className="mt-7 grid grid-cols-1 gap-6 animate-fade-up lg:grid-cols-12 lg:gap-8">
-              {/* Cámara + controles */}
-              <div className="flex flex-col gap-5 lg:col-span-7">
+            <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
+              <AppPageStagger className="flex flex-col gap-5 lg:col-span-7">
                 <div
                   className={
                     'relative overflow-hidden rounded-[2rem] border-[3px] shadow-[0_24px_50px_-28px_rgba(147,190,240,0.75)] ' +
@@ -670,12 +674,11 @@ export default function InterpretScreen({ onBack, onHome }) {
                     </p>
                   </div>
                 )}
-              </div>
+              </AppPageStagger>
 
-              {/* Panel lateral */}
-              <div className="flex flex-col gap-5 lg:col-span-5">
+              <AppPageStagger className="flex flex-col gap-5 lg:col-span-5">
                 {/* Última detección — hero */}
-                <div className="rounded-[1.5rem] border-[3px] border-pastel-blue-line bg-white p-5 shadow-[0_16px_36px_-22px_rgba(45,42,38,0.35)] sm:p-6">
+                <div className="motion-surface animate-motion-scale-in rounded-[1.5rem] border-[3px] border-pastel-blue-line bg-white p-5 shadow-[0_16px_36px_-22px_rgba(45,42,38,0.35)] sm:p-6">
                   <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">Última seña</p>
                   {latest ? (
                     <>
@@ -727,16 +730,15 @@ export default function InterpretScreen({ onBack, onHome }) {
                     ))}
                   </ul>
                 </OutputCard>
-              </div>
+              </AppPageStagger>
             </div>
-          </div>
-        </div>
-      </section>
+        </AppPagePanel>
+      </AppPageMain>
 
-      <footer className="border-t border-pastel-ink/10 px-6 py-5 text-center">
+      <AppPageFooter>
         <p className="text-xs text-pastel-sub">GNN + LSTM · solo manos · MediaPipe Holistic</p>
-      </footer>
-    </div>
+      </AppPageFooter>
+    </AppPage>
   )
 }
 
@@ -781,7 +783,7 @@ function MlStatusPill({ mlMode, mlConnecting, onRetry }) {
 
 function OutputCard({ title, empty, emptyIcon, hasContent, children }) {
   return (
-    <div className="rounded-[1.5rem] border-2 border-pastel-ink/10 bg-white p-4 shadow-[0_14px_30px_-24px_rgba(45,42,38,0.35)] sm:p-5">
+    <div className="motion-surface rounded-[1.5rem] border-2 border-pastel-ink/10 bg-white p-4 shadow-[0_14px_30px_-24px_rgba(45,42,38,0.35)] sm:p-5">
       <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">{title}</p>
       <div className="mt-3">
         {hasContent ? children : (
