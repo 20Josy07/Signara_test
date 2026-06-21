@@ -138,11 +138,19 @@ body {
     box-shadow: 0 0 0 9999px rgba(45, 42, 38, 0.78);
   }
 
+  .tutorial-mobile-cutout-hole--enter {
+    animation: tutorial-dim-in 0.45s cubic-bezier(0.2, 0, 0, 1) both;
+  }
+
   .tutorial-mobile-cutout-ring {
     border-radius: 1rem;
     box-shadow:
       0 0 0 2px rgba(255, 255, 255, 0.95),
       0 0 0 5px rgba(126, 100, 201, 0.5);
+  }
+
+  .tutorial-mobile-cutout-ring--pulse {
+    animation: tutorial-cutout-pulse 2.2s ease-in-out infinite;
   }
 
   .tutorial-mobile-cutout-label {
@@ -171,9 +179,54 @@ body {
     }
   }
 
+  @keyframes tutorial-dim-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes tutorial-cutout-pulse {
+    0%,
+    100% {
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.95),
+        0 0 0 5px rgba(126, 100, 201, 0.45);
+    }
+    50% {
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 1),
+        0 0 0 9px rgba(126, 100, 201, 0.62);
+    }
+  }
+
+  .tutorial-stagger > * {
+    animation: motion-enter 0.5s cubic-bezier(0.05, 0.7, 0.1, 1) both;
+  }
+
+  .tutorial-stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .tutorial-stagger > *:nth-child(2) { animation-delay: 80ms; }
+  .tutorial-stagger > *:nth-child(3) { animation-delay: 160ms; }
+  .tutorial-stagger > *:nth-child(4) { animation-delay: 240ms; }
+  .tutorial-stagger > *:nth-child(5) { animation-delay: 320ms; }
+
   @media (prefers-reduced-motion: reduce) {
-    .tutorial-mobile-intro {
-      animation: none;
+    .tutorial-mobile-intro,
+    .tutorial-mobile-cutout-ring--pulse,
+    .tutorial-mobile-cutout-hole--enter,
+    .tutorial-stagger > *,
+    .animate-tutorial-dim-in,
+    .animate-tutorial-label-pop,
+    .animate-tutorial-footer-up,
+    .animate-tutorial-header-down,
+    .animate-tutorial-emoji-pop,
+    .animate-tutorial-dot-pop,
+    .animate-permission-overlay-in,
+    .animate-permission-card-in,
+    .animate-permission-item-in {
+      animation: none !important;
     }
   }
 

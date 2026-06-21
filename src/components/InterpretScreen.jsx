@@ -869,17 +869,29 @@ function OutputCard({ title, empty, emptyIcon, hasContent, children }) {
 
 function CameraPermissionPrompt({ onAccept, onDecline }) {
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center overflow-y-auto bg-pastel-ink/78 p-3 sm:p-5">
-      <div className="my-auto w-full max-w-sm rounded-2xl border-2 border-pastel-blue-line bg-[#FAF6EC] p-4 text-center shadow-xl sm:p-5">
-        <p className="text-2xl sm:text-3xl" aria-hidden="true">
+    <div className="absolute inset-0 z-30 flex animate-permission-overlay-in items-center justify-center overflow-y-auto bg-pastel-ink/78 p-3 sm:p-5">
+      <div className="my-auto w-full max-w-sm animate-permission-card-in rounded-2xl border-2 border-pastel-blue-line bg-[#FAF6EC] p-4 text-center shadow-xl sm:p-5">
+        <p
+          className="animate-float text-2xl sm:text-3xl"
+          style={{ animationDuration: '3.5s' }}
+          aria-hidden="true"
+        >
           📷
         </p>
-        <p className="mt-2 text-base font-extrabold text-pastel-ink sm:text-lg">Necesitamos tu cámara</p>
-        <p className="mt-2 text-xs leading-relaxed text-pastel-sub sm:text-sm">
+        <p className="animate-permission-item-in mt-2 text-base font-extrabold text-pastel-ink sm:text-lg">
+          Necesitamos tu cámara
+        </p>
+        <p
+          className="animate-permission-item-in mt-2 text-xs leading-relaxed text-pastel-sub sm:text-sm"
+          style={{ animationDelay: '80ms' }}
+        >
           Para interpretar lengua de señas, Signara necesita acceso a la cámara de tu dispositivo.
           Si no concedes el permiso, esta función no estará disponible.
         </p>
-        <div className="mt-4 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:justify-center">
+        <div
+          className="animate-permission-item-in mt-4 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:justify-center"
+          style={{ animationDelay: '160ms' }}
+        >
           <button
             type="button"
             onClick={onAccept}

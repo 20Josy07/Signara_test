@@ -99,14 +99,14 @@ function scrollTargetIntoView(
   })
 }
 
-function TutorialCutout({ spot, visible, motionClass }) {
+function TutorialCutout({ spot, visible, motionClass, stepIndex }) {
   if (!visible) return null
 
   if (!spot) {
     return (
       <div
         aria-hidden="true"
-        className="tutorial-mobile-dim pointer-events-none fixed inset-0 z-[251]"
+        className="tutorial-mobile-dim animate-tutorial-dim-in pointer-events-none fixed inset-0 z-[251]"
       />
     )
   }
@@ -115,7 +115,10 @@ function TutorialCutout({ spot, visible, motionClass }) {
     <>
       <div
         aria-hidden="true"
-        className={'tutorial-mobile-cutout-hole pointer-events-none fixed z-[251] ' + motionClass}
+        className={
+          'tutorial-mobile-cutout-hole tutorial-mobile-cutout-hole--enter pointer-events-none fixed z-[251] ' +
+          motionClass
+        }
         style={{
           top: spot.top,
           left: spot.left,
@@ -125,7 +128,10 @@ function TutorialCutout({ spot, visible, motionClass }) {
       />
       <div
         aria-hidden="true"
-        className={'tutorial-mobile-cutout-ring pointer-events-none fixed z-[252] ' + motionClass}
+        className={
+          'tutorial-mobile-cutout-ring tutorial-mobile-cutout-ring--pulse pointer-events-none fixed z-[252] ' +
+          motionClass
+        }
         style={{
           top: spot.top,
           left: spot.left,
@@ -134,8 +140,12 @@ function TutorialCutout({ spot, visible, motionClass }) {
         }}
       />
       <span
+        key={stepIndex}
         aria-hidden="true"
-        className={'tutorial-mobile-cutout-label pointer-events-none fixed z-[253] ' + motionClass}
+        className={
+          'tutorial-mobile-cutout-label animate-tutorial-label-pop pointer-events-none fixed z-[253] ' +
+          motionClass
+        }
         style={{
           top: Math.max(8, spot.top - 30),
           left: spot.left + spot.width / 2,
@@ -148,13 +158,14 @@ function TutorialCutout({ spot, visible, motionClass }) {
   )
 }
 
-function TutorialHeader({ accent, stepIndex, steps, onClose, className = '' }) {
+function TutorialHeader({ accent, stepIndex, steps, onClose, className = '', animate = false }) {
   const progress = ((stepIndex + 1) / steps.length) * 100
 
   return (
     <header
       className={
         'tutorial-mobile-header shrink-0 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-8 ' +
+        (animate ? 'animate-tutorial-header-down ' : '') +
         className
       }
     >
@@ -182,7 +193,10 @@ function TutorialHeader({ accent, stepIndex, steps, onClose, className = '' }) {
         </p>
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-pastel-ink/10">
           <div
-            className={'h-full rounded-full transition-all duration-500 ease-out ' + accent.bar}
+            className={
+              'h-full rounded-full transition-all duration-700 ease-[cubic-bezier(0.05,0.7,0.1,1)] ' +
+              accent.bar
+            }
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -200,7 +214,9 @@ function TutorialNav({ accent, stepIndex, steps, isLast, onPrev, onNext, compact
             key={i}
             className={
               'h-1.5 rounded-full transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ' +
-              (i === stepIndex ? 'w-5 bg-pastel-grape' : 'w-1.5 bg-pastel-ink/20')
+              (i === stepIndex
+                ? 'w-5 animate-tutorial-dot-pop bg-pastel-grape'
+                : 'w-1.5 bg-pastel-ink/20')
             }
           />
         ))}
@@ -244,36 +260,45 @@ function TutorialIntro({
   onPrev,
   onNext,
 }) {
-  const enterClass = closing
-    ? 'animate-motion-modal-out'
-    : showMotion
-      ? 'animate-motion-fade-through'
-      : 'opacity-0'
+  const enterClass = closing ? 'animate-motion-modal-out' : showMotion ? '' : 'opacity-0'
 
   return (
-    <div className="tutorial-mobile-intro pointer-events-auto fixed inset-0 z-[250] flex flex-col bg-[#FAF6EC]">
-      <TutorialHeader accent={accent} stepIndex={stepIndex} steps={steps} onClose={onClose} />
+    <div
+      className={
+        'tutorial-mobile-intro pointer-events-auto fixed inset-0 z-[250] flex flex-col bg-[#FAF6EC] ' +
+        (closing ? 'animate-motion-modal-out' : '')
+      }
+    >
+      <TutorialHeader
+        accent={accent}
+        stepIndex={stepIndex}
+        steps={steps}
+        onClose={onClose}
+        animate={showMotion && !closing}
+      />
 
       <main
         className={
           'flex flex-1 flex-col items-center justify-center px-6 text-center sm:px-10 ' + enterClass
         }
       >
-        <span className="text-6xl leading-none sm:text-7xl" aria-hidden="true">
-          {step.emoji}
-        </span>
-        <h2
-          id="mode-tutorial-title"
-          className="mt-5 max-w-lg text-2xl font-extrabold tracking-tight text-pastel-ink sm:text-3xl"
-        >
-          {step.title}
-        </h2>
-        <p className="mt-3 max-w-md text-base leading-relaxed text-pastel-sub sm:text-lg">
-          {step.body}
-        </p>
+        <div className="tutorial-stagger flex flex-col items-center">
+          <span className="text-6xl leading-none sm:text-7xl" aria-hidden="true">
+            {step.emoji}
+          </span>
+          <h2
+            id="mode-tutorial-title"
+            className="mt-5 max-w-lg text-2xl font-extrabold tracking-tight text-pastel-ink sm:text-3xl"
+          >
+            {step.title}
+          </h2>
+          <p className="mt-3 max-w-md text-base leading-relaxed text-pastel-sub sm:text-lg">
+            {step.body}
+          </p>
+        </div>
       </main>
 
-      <footer className="tutorial-mobile-footer shrink-0 px-4 pt-2 sm:px-8">
+      <footer className="tutorial-mobile-footer animate-tutorial-footer-up shrink-0 px-4 pt-2 sm:px-8">
         <div className="mx-auto max-w-lg">
           <TutorialNav
             accent={accent}
@@ -300,19 +325,22 @@ function TutorialCoach({
   stepMotionClass,
   closing,
   footerRef,
+  stepDir,
   onClose,
   onPrev,
   onNext,
 }) {
-  const enterClass = closing
-    ? 'animate-motion-modal-out'
-    : showMotion
-      ? 'animate-motion-fade-through'
-      : 'opacity-0'
+  const stepEnterClass =
+    stepDir > 0 ? 'animate-motion-enter-forward' : 'animate-motion-enter-back'
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[250]">
-      <TutorialCutout spot={spot} visible={showMotion} motionClass={stepMotionClass} />
+      <TutorialCutout
+        spot={spot}
+        visible={showMotion}
+        motionClass={stepMotionClass}
+        stepIndex={stepIndex}
+      />
 
       <div className="flex h-full flex-col">
         <TutorialHeader
@@ -320,6 +348,7 @@ function TutorialCoach({
           stepIndex={stepIndex}
           steps={steps}
           onClose={onClose}
+          animate={showMotion && !closing}
           className="pointer-events-auto relative z-[260]"
         />
 
@@ -328,13 +357,16 @@ function TutorialCoach({
         <footer
           ref={footerRef}
           className={
-            'tutorial-mobile-footer pointer-events-auto relative z-[260] shrink-0 px-4 pt-3 sm:px-8 sm:pt-4 ' +
-            enterClass
+            'tutorial-mobile-footer animate-tutorial-footer-up pointer-events-auto relative z-[260] shrink-0 px-4 pt-3 sm:px-8 sm:pt-4 ' +
+            (closing ? 'animate-motion-slide-down' : '')
           }
         >
-          <div className="mx-auto max-w-2xl">
+          <div key={stepIndex} className={'mx-auto max-w-2xl ' + stepEnterClass}>
             <div className="flex items-start gap-3 sm:gap-4">
-              <span className="text-2xl leading-none sm:text-3xl" aria-hidden="true">
+              <span
+                className="animate-tutorial-emoji-pop text-2xl leading-none sm:text-3xl"
+                aria-hidden="true"
+              >
                 {step.emoji}
               </span>
               <div className="min-w-0 flex-1">
@@ -371,7 +403,7 @@ export function TutorialHelpButton({ onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="motion-press inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-pastel-purple-line bg-pastel-purple text-sm font-extrabold text-pastel-grape transition hover:brightness-105 focus:outline-none focus:ring-4 focus:ring-pastel-purple/40"
+      className="motion-press inline-flex h-9 w-9 shrink-0 animate-pulse-soft items-center justify-center rounded-full border-2 border-pastel-purple-line bg-pastel-purple text-sm font-extrabold text-pastel-grape transition hover:brightness-105 focus:outline-none focus:ring-4 focus:ring-pastel-purple/40"
       aria-label="Ver tutorial de este modo"
       title="Tutorial"
     >
@@ -387,6 +419,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
   const [stepAnimReady, setStepAnimReady] = useState(false)
   const [spotLive, setSpotLive] = useState(false)
   const [footerHeight, setFooterHeight] = useState(FOOTER_FALLBACK)
+  const [stepDir, setStepDir] = useState(1)
   const footerRef = useRef(null)
   const stepAnimReadyRef = useRef(false)
   const { closing, requestClose } = useMotionExit(onComplete, MODAL_EXIT_MS)
@@ -420,6 +453,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
       setStepAnimReady(false)
       setSpotLive(false)
       setFooterHeight(FOOTER_FALLBACK)
+      setStepDir(1)
       stepAnimReadyRef.current = false
       return
     }
@@ -513,6 +547,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
   }
 
   function nextStep() {
+    setStepDir(1)
     if (isLast) {
       closeTutorial()
       return
@@ -521,6 +556,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
   }
 
   function prevStep() {
+    setStepDir(-1)
     setStepIndex((i) => Math.max(0, i - 1))
   }
 
@@ -558,6 +594,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
           spot={spot}
           stepMotionClass={stepMotionClass}
           footerRef={footerRef}
+          stepDir={stepDir}
         />
       )}
     </div>,
