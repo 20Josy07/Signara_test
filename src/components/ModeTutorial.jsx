@@ -8,12 +8,14 @@ const ACCENTS = {
     chip: 'bg-pastel-green border-pastel-green-line text-pastel-ink',
     ring: 'ring-pastel-green-line',
     btn: 'bg-pastel-grape',
+    bar: 'bg-pastel-green',
   },
   interpret: {
     label: 'Interpretar',
     chip: 'bg-pastel-blue border-pastel-blue-line text-pastel-ink',
     ring: 'ring-pastel-blue-line',
     btn: 'bg-pastel-grape',
+    bar: 'bg-pastel-blue',
   },
 }
 
@@ -22,7 +24,8 @@ const DIM_PANEL =
 
 const CARD_WIDTH = 320
 const CARD_HEIGHT_EST = 300
-const MOBILE_SHEET_FALLBACK = 240
+const MOBILE_FOOTER_FALLBACK = 220
+const MOBILE_HEADER_H = 92
 const MOBILE_BREAKPOINT = 640
 const VIEW_MARGIN = 16
 const CARD_GAP = 14
@@ -38,7 +41,7 @@ function isMobileLayout() {
 
 function measureSpot(el, pad = 10) {
   const mobile = isMobileLayout()
-  const edgePad = mobile ? 8 : pad
+  const edgePad = mobile ? 6 : pad
   const r = el.getBoundingClientRect()
   return {
     top: r.top - edgePad,
@@ -72,25 +75,41 @@ function applyScrollLock(scrollY = window.scrollY) {
   document.body.style.width = '100%'
 }
 
-function scrollTargetIntoView(
+function mobileViewportBounds(footerHeight = MOBILE_FOOTER_FALLBACK) {
+  const top = MOBILE_HEADER_H + 10
+  const bottom = window.innerHeight - footerHeight - 10
+  return { top, bottom, height: Math.max(0, bottom - top) }
+}
+
+function computeMobileScrollDelta(el, footerHeight = MOBILE_FOOTER_FALLBACK) {
+  const r = el.getBoundingClientRect()
+  const { top, bottom, height: zoneHeight } = mobileViewportBounds(footerHeight)
+
+  if (r.height > zoneHeight) {
+    return r.top - top
+  }
+
+  if (r.bottom > bottom) {
+    return r.bottom - bottom + 6
+  }
+
+  if (r.top < top) {
+    return r.top - top
+  }
+
+  return 0
+}
+
+function scrollMobileTarget(
   el,
-  { animate = false, onFrame, mobile = isMobileLayout(), sheetHeight = MOBILE_SHEET_FALLBACK } = {},
+  { animate = false, onFrame, footerHeight = MOBILE_FOOTER_FALLBACK } = {},
 ) {
   releaseScrollLock()
 
-  if (mobile) {
-    const r = el.getBoundingClientRect()
-    const spotlightMax = window.innerHeight - sheetHeight - 16
-
-    if (r.bottom > spotlightMax) {
-      window.scrollBy({ top: r.bottom - spotlightMax + 8, behavior: animate ? 'smooth' : 'auto' })
-    } else if (r.top < 12) {
-      window.scrollBy({ top: r.top - 12, behavior: animate ? 'smooth' : 'auto' })
-    }
-  } else {
-    el.scrollIntoView({
-      block: 'center',
-      inline: 'nearest',
+  const scrollDelta = computeMobileScrollDelta(el, footerHeight)
+  if (Math.abs(scrollDelta) > 1) {
+    window.scrollBy({
+      top: scrollDelta,
       behavior: animate ? 'smooth' : 'auto',
     })
   }
@@ -120,12 +139,46 @@ function scrollTargetIntoView(
   })
 }
 
-function targetNeedsScroll(el, mobile = isMobileLayout(), sheetHeight = MOBILE_SHEET_FALLBACK) {
-  const r = el.getBoundingClientRect()
-  if (mobile) {
-    const spotlightMax = window.innerHeight - sheetHeight - 16
-    return r.top < 12 || r.bottom > spotlightMax
+function mobileTargetNeedsScroll(el, footerHeight = MOBILE_FOOTER_FALLBACK) {
+  return Math.abs(computeMobileScrollDelta(el, footerHeight)) > 2
+}
+
+function scrollDesktopTarget(el, { animate = false, onFrame } = {}) {
+  releaseScrollLock()
+
+  el.scrollIntoView({
+    block: 'center',
+    inline: 'nearest',
+    behavior: animate ? 'smooth' : 'auto',
+  })
+
+  if (!animate) {
+    applyScrollLock(window.scrollY)
+    onFrame?.()
+    return Promise.resolve()
   }
+
+  return new Promise((resolve) => {
+    const start = performance.now()
+    let rafId = 0
+
+    const tick = () => {
+      onFrame?.()
+      if (performance.now() - start < STEP_MORPH_MS) {
+        rafId = requestAnimationFrame(tick)
+        return
+      }
+      applyScrollLock(window.scrollY)
+      onFrame?.()
+      resolve()
+    }
+
+    rafId = requestAnimationFrame(tick)
+  })
+}
+
+function desktopTargetNeedsScroll(el) {
+  const r = el.getBoundingClientRect()
   const margin = 56
   return r.top < margin || r.bottom > window.innerHeight - margin
 }
@@ -224,33 +277,281 @@ function TutorialDimPanels({ spot, visible, onDismiss, motionClass }) {
   )
 }
 
-function TutorialMobileSpotlight({ spot, visible, onDismiss, motionClass, sheetHeight }) {
-  if (!spot) return null
+function TutorialMobileCutout({ spot, visible, onDismiss, motionClass }) {
+  if (!visible) return null
 
-  const zoneHeight = Math.max(0, window.innerHeight - sheetHeight)
+  if (!spot) {
+    return (
+      <button
+        type="button"
+        className="tutorial-mobile-dim fixed inset-0 z-[251] pointer-events-auto"
+        onClick={onDismiss}
+        aria-label="Cerrar tutorial"
+      />
+    )
+  }
 
   return (
-    <div
-      className="pointer-events-none absolute inset-x-0 top-0 overflow-hidden"
-      style={{ height: zoneHeight }}
-    >
-      <TutorialDimPanels
-        spot={spot}
-        visible={visible}
-        onDismiss={onDismiss}
-        motionClass={motionClass}
+    <>
+      <button
+        type="button"
+        aria-label="Cerrar tutorial"
+        onClick={onDismiss}
+        className={'tutorial-mobile-cutout-hole fixed z-[251] pointer-events-auto ' + motionClass}
+        style={{
+          top: spot.top,
+          left: spot.left,
+          width: spot.width,
+          height: spot.height,
+        }}
       />
-      {visible && (
-        <div
-          className={'tutorial-mobile-spotlight pointer-events-none absolute ' + motionClass}
-          style={{
-            top: spot.top,
-            left: spot.left,
-            width: spot.width,
-            height: spot.height,
-          }}
-        />
+      <div
+        aria-hidden="true"
+        className={'tutorial-mobile-cutout-ring fixed z-[252] pointer-events-none ' + motionClass}
+        style={{
+          top: spot.top,
+          left: spot.left,
+          width: spot.width,
+          height: spot.height,
+        }}
+      />
+      <span
+        aria-hidden="true"
+        className={
+          'tutorial-mobile-cutout-label fixed z-[253] pointer-events-none ' + motionClass
+        }
+        style={{
+          top: Math.max(8, spot.top - 30),
+          left: spot.left + spot.width / 2,
+          transform: 'translateX(-50%)',
+        }}
+      >
+        Aquí
+      </span>
+    </>
+  )
+}
+
+function MobileTutorialHeader({ accent, stepIndex, steps, onClose, showProgress = true, className = '' }) {
+  const progress = ((stepIndex + 1) / steps.length) * 100
+
+  return (
+    <header
+      className={
+        'tutorial-mobile-header shrink-0 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] ' + className
+      }
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span
+          className={
+            'inline-flex items-center rounded-full border-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ' +
+            accent.chip
+          }
+        >
+          Tutorial · {accent.label}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="motion-press rounded-lg px-2 py-1 text-xs font-bold text-pastel-sub transition hover:text-pastel-ink"
+        >
+          Saltar
+        </button>
+      </div>
+
+      {showProgress && (
+        <>
+          <p className="mt-3 text-xs font-bold text-pastel-sub">
+            Paso {stepIndex + 1} de {steps.length}
+          </p>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-pastel-ink/10">
+            <div
+              className={'h-full rounded-full transition-all duration-500 ease-out ' + accent.bar}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </>
       )}
+    </header>
+  )
+}
+
+function MobileTutorialNav({
+  accent,
+  stepIndex,
+  steps,
+  isLast,
+  onPrev,
+  onNext,
+  compact = false,
+}) {
+  return (
+    <div className={compact ? 'mt-4 space-y-3' : 'mt-6 space-y-4'}>
+      <div className="flex justify-center gap-1.5">
+        {steps.map((_, i) => (
+          <span
+            key={i}
+            className={
+              'h-1.5 rounded-full transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ' +
+              (i === stepIndex ? 'w-5 bg-pastel-grape' : 'w-1.5 bg-pastel-ink/20')
+            }
+          />
+        ))}
+      </div>
+      <div className="flex gap-2">
+        {stepIndex > 0 && (
+          <button
+            type="button"
+            onClick={onPrev}
+            className="motion-press flex-1 rounded-xl border-2 border-pastel-ink/15 bg-white py-3 text-sm font-bold text-pastel-sub"
+          >
+            Atrás
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onNext}
+          className={
+            'motion-press rounded-xl py-3 text-sm font-bold text-white ' +
+            accent.btn +
+            ' ' +
+            (stepIndex > 0 ? 'flex-[2]' : 'flex-1')
+          }
+        >
+          {isLast ? 'Empezar' : 'Siguiente'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function MobileTutorialIntro({
+  accent,
+  step,
+  stepIndex,
+  steps,
+  isLast,
+  showMotion,
+  closing,
+  onClose,
+  onPrev,
+  onNext,
+}) {
+  const enterClass = closing
+    ? 'animate-motion-modal-out'
+    : showMotion
+      ? 'animate-motion-fade-through'
+      : 'opacity-0'
+
+  return (
+    <div className="tutorial-mobile-intro pointer-events-auto fixed inset-0 z-[250] flex flex-col bg-[#FAF6EC]">
+      <MobileTutorialHeader
+        accent={accent}
+        stepIndex={stepIndex}
+        steps={steps}
+        onClose={onClose}
+      />
+
+      <main className={'flex flex-1 flex-col items-center justify-center px-6 text-center ' + enterClass}>
+        <span className="text-6xl leading-none" aria-hidden="true">
+          {step.emoji}
+        </span>
+        <h2
+          id="mode-tutorial-title"
+          className="mt-5 text-2xl font-extrabold tracking-tight text-pastel-ink"
+        >
+          {step.title}
+        </h2>
+        <p className="mt-3 max-w-sm text-base leading-relaxed text-pastel-sub">{step.body}</p>
+      </main>
+
+      <footer className="tutorial-mobile-footer shrink-0 px-4 pt-2">
+        <MobileTutorialNav
+          accent={accent}
+          stepIndex={stepIndex}
+          steps={steps}
+          isLast={isLast}
+          onPrev={onPrev}
+          onNext={onNext}
+        />
+      </footer>
+    </div>
+  )
+}
+
+function MobileTutorialCoach({
+  accent,
+  step,
+  stepIndex,
+  steps,
+  isLast,
+  spot,
+  showMotion,
+  stepMotionClass,
+  closing,
+  footerRef,
+  onClose,
+  onPrev,
+  onNext,
+}) {
+  const enterClass = closing
+    ? 'animate-motion-modal-out'
+    : showMotion
+      ? 'animate-motion-fade-through'
+      : 'opacity-0'
+
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[250]">
+      <TutorialMobileCutout
+        spot={spot}
+        visible={showMotion}
+        onDismiss={onClose}
+        motionClass={stepMotionClass}
+      />
+
+      <div className="flex h-full flex-col">
+        <MobileTutorialHeader
+          accent={accent}
+          stepIndex={stepIndex}
+          steps={steps}
+          onClose={onClose}
+          className="pointer-events-auto relative z-[260]"
+        />
+
+        <div className="flex-1" aria-hidden="true" />
+
+        <footer
+          ref={footerRef}
+          className={
+            'tutorial-mobile-footer pointer-events-auto relative z-[260] shrink-0 px-4 pt-3 ' + enterClass
+          }
+        >
+          <div className="flex items-start gap-3">
+            <span className="text-2xl leading-none" aria-hidden="true">
+              {step.emoji}
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2
+                id="mode-tutorial-title"
+                className="text-lg font-extrabold leading-snug text-pastel-ink"
+              >
+                {step.title}
+              </h2>
+              <p className="mt-1.5 text-sm leading-relaxed text-pastel-sub">{step.body}</p>
+            </div>
+          </div>
+
+          <MobileTutorialNav
+            accent={accent}
+            stepIndex={stepIndex}
+            steps={steps}
+            isLast={isLast}
+            onPrev={onPrev}
+            onNext={onNext}
+            compact
+          />
+        </footer>
+      </div>
     </div>
   )
 }
@@ -264,7 +565,6 @@ function TutorialCardContent({
   onClose,
   onPrev,
   onNext,
-  compact = false,
 }) {
   return (
     <div key={stepIndex} className="animate-motion-fade-through">
@@ -286,30 +586,20 @@ function TutorialCardContent({
         </button>
       </div>
 
-      <div className={compact ? 'mt-3 flex items-start gap-3' : 'mt-4'}>
-        <p className={compact ? 'shrink-0 text-2xl leading-none' : 'text-3xl'} aria-hidden="true">
+      <div className="mt-4">
+        <p className="text-3xl" aria-hidden="true">
           {step.emoji}
         </p>
-        <div className={compact ? 'min-w-0 flex-1' : ''}>
-          <h2
-            id="mode-tutorial-title"
-            className={
-              (compact ? 'text-lg leading-snug' : 'mt-2 text-xl') + ' font-extrabold text-pastel-ink'
-            }
-          >
-            {step.title}
-          </h2>
-          {!compact && (
-            <p className="mt-2 text-sm leading-relaxed text-pastel-sub">{step.body}</p>
-          )}
-        </div>
+        <h2
+          id="mode-tutorial-title"
+          className="mt-2 text-xl font-extrabold text-pastel-ink"
+        >
+          {step.title}
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-pastel-sub">{step.body}</p>
       </div>
 
-      {compact && (
-        <p className="mt-2.5 text-sm leading-relaxed text-pastel-sub">{step.body}</p>
-      )}
-
-      <div className={compact ? 'mt-4 space-y-3' : 'mt-5 flex items-center justify-between gap-3'}>
+      <div className="mt-5 flex items-center justify-between gap-3">
         <div className="flex gap-1.5">
           {steps.map((_, i) => (
             <span
@@ -321,15 +611,12 @@ function TutorialCardContent({
             />
           ))}
         </div>
-        <div className={'flex gap-2 ' + (compact ? 'w-full' : '')}>
+        <div className="flex gap-2">
           {stepIndex > 0 && (
             <button
               type="button"
               onClick={onPrev}
-              className={
-                'motion-press rounded-xl border-2 border-pastel-ink/15 bg-white px-3 py-2.5 text-sm font-bold text-pastel-sub ' +
-                (compact ? 'flex-1' : '')
-              }
+              className="motion-press rounded-xl border-2 border-pastel-ink/15 bg-white px-3 py-2.5 text-sm font-bold text-pastel-sub"
             >
               Atrás
             </button>
@@ -338,10 +625,7 @@ function TutorialCardContent({
             type="button"
             onClick={onNext}
             className={
-              'motion-press rounded-xl px-4 py-2.5 text-sm font-bold text-white ' +
-              accent.btn +
-              ' ' +
-              (compact ? 'flex-[2]' : '')
+              'motion-press rounded-xl px-4 py-2.5 text-sm font-bold text-white ' + accent.btn
             }
           >
             {isLast ? 'Empezar' : 'Siguiente'}
@@ -375,8 +659,8 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
   const [layoutMobile, setLayoutMobile] = useState(() =>
     typeof window !== 'undefined' ? isMobileLayout() : false,
   )
-  const [sheetHeight, setSheetHeight] = useState(MOBILE_SHEET_FALLBACK)
-  const sheetRef = useRef(null)
+  const [footerHeight, setFooterHeight] = useState(MOBILE_FOOTER_FALLBACK)
+  const footerRef = useRef(null)
   const stepAnimReadyRef = useRef(false)
   const { closing, requestClose } = useMotionExit(onComplete, MODAL_EXIT_MS)
 
@@ -384,20 +668,22 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
   const step = steps[stepIndex]
   const isLast = stepIndex >= steps.length - 1
   const showMotion = entered && !closing
+  const isMobileIntro = layoutMobile && !step?.target
+  const isMobileCoach = layoutMobile && !!step?.target
 
   useLayoutEffect(() => {
-    if (!open || !layoutMobile || !sheetRef.current) return
+    if (!open || !isMobileCoach || !footerRef.current) return
 
     const measure = () => {
-      const h = sheetRef.current?.offsetHeight
-      if (h && h > 0) setSheetHeight(h)
+      const h = footerRef.current?.offsetHeight
+      if (h && h > 0) setFooterHeight(h)
     }
 
     measure()
     const ro = new ResizeObserver(measure)
-    ro.observe(sheetRef.current)
+    ro.observe(footerRef.current)
     return () => ro.disconnect()
-  }, [open, layoutMobile, stepIndex, step?.title])
+  }, [open, isMobileCoach, stepIndex, step?.title])
 
   useEffect(() => {
     if (!open) {
@@ -406,7 +692,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
       setSpot(null)
       setStepAnimReady(false)
       setSpotLive(false)
-      setSheetHeight(MOBILE_SHEET_FALLBACK)
+      setFooterHeight(MOBILE_FOOTER_FALLBACK)
       stepAnimReadyRef.current = false
       return
     }
@@ -469,15 +755,17 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
   useEffect(() => {
     if (!open || !step?.target) {
       setSpot(null)
+      setStepAnimReady(!step?.target)
       return
     }
 
     let cancelled = false
     let rafId = 0
-    let targetEl = document.querySelector(`[data-tutorial="${step.target}"]`)
+    const targetEl = document.querySelector(`[data-tutorial="${step.target}"]`)
 
     if (!targetEl) {
       setSpot(null)
+      setStepAnimReady(true)
       return
     }
 
@@ -492,30 +780,55 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
     const alignTarget = async () => {
       const mobile = isMobileLayout()
       setLayoutMobile(mobile)
-      const reserve = mobile ? sheetHeight : MOBILE_SHEET_FALLBACK
-      const animateScroll =
-        stepIndex > 0 && stepAnimReadyRef.current && targetNeedsScroll(targetEl, mobile, reserve)
 
-      if (animateScroll) {
-        setSpotLive(true)
-        await scrollTargetIntoView(targetEl, {
-          animate: true,
-          mobile,
-          sheetHeight: reserve,
-          onFrame: () => {
-            if (!cancelled) setSpot(measureSpot(targetEl))
-          },
-        })
-        if (!cancelled) setSpotLive(false)
+      if (mobile) {
+        const animateScroll =
+          stepIndex > 0 &&
+          stepAnimReadyRef.current &&
+          mobileTargetNeedsScroll(targetEl, footerHeight)
+
+        if (animateScroll) {
+          setSpotLive(true)
+          await scrollMobileTarget(targetEl, {
+            animate: true,
+            footerHeight,
+            onFrame: () => {
+              if (!cancelled) setSpot(measureSpot(targetEl))
+            },
+          })
+          if (!cancelled) setSpotLive(false)
+        } else {
+          await scrollMobileTarget(targetEl, {
+            animate: false,
+            footerHeight,
+            onFrame: () => {
+              if (!cancelled) setSpot(measureSpot(targetEl))
+            },
+          })
+        }
       } else {
-        await scrollTargetIntoView(targetEl, {
-          animate: false,
-          mobile,
-          sheetHeight: reserve,
-          onFrame: () => {
-            if (!cancelled) setSpot(measureSpot(targetEl))
-          },
-        })
+        const animateScroll =
+          stepIndex > 0 &&
+          stepAnimReadyRef.current &&
+          desktopTargetNeedsScroll(targetEl)
+
+        if (animateScroll) {
+          setSpotLive(true)
+          await scrollDesktopTarget(targetEl, {
+            animate: true,
+            onFrame: () => {
+              if (!cancelled) setSpot(measureSpot(targetEl))
+            },
+          })
+          if (!cancelled) setSpotLive(false)
+        } else {
+          await scrollDesktopTarget(targetEl, {
+            animate: false,
+            onFrame: () => {
+              if (!cancelled) setSpot(measureSpot(targetEl))
+            },
+          })
+        }
       }
 
       if (cancelled) return
@@ -528,11 +841,16 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
 
     alignTarget()
 
-    const prevPosition = targetEl.style.position
-    const prevZIndex = targetEl.style.zIndex
-    const computed = window.getComputedStyle(targetEl)
-    if (computed.position === 'static') targetEl.style.position = 'relative'
-    targetEl.style.zIndex = '251'
+    const mobileAtStart = isMobileLayout()
+    let prevPosition
+    let prevZIndex
+    if (!mobileAtStart) {
+      prevPosition = targetEl.style.position
+      prevZIndex = targetEl.style.zIndex
+      const computed = window.getComputedStyle(targetEl)
+      if (computed.position === 'static') targetEl.style.position = 'relative'
+      targetEl.style.zIndex = '251'
+    }
 
     window.addEventListener('resize', updateSpot)
     const resizeObserver = new ResizeObserver(updateSpot)
@@ -543,10 +861,12 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
       cancelAnimationFrame(rafId)
       window.removeEventListener('resize', updateSpot)
       resizeObserver.disconnect()
-      targetEl.style.position = prevPosition
-      targetEl.style.zIndex = prevZIndex
+      if (!mobileAtStart) {
+        targetEl.style.position = prevPosition
+        targetEl.style.zIndex = prevZIndex
+      }
     }
-  }, [open, stepIndex, step?.target, sheetHeight])
+  }, [open, stepIndex, step?.target, footerHeight])
 
   if (!open) return null
 
@@ -583,7 +903,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
 
   const cardEnterClass = closing
     ? 'animate-motion-modal-out'
-    : showMotion && !stepAnimReady
+    : showMotion && !stepAnimReady && !layoutMobile
       ? 'animate-motion-modal-in'
       : showMotion
         ? ''
@@ -602,49 +922,30 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
 
   return createPortal(
     <div
-      className={'fixed inset-0 z-[250] overscroll-none pointer-events-none ' + (closing ? 'motion-exit-host' : '')}
+      className={'overscroll-none ' + (closing ? 'motion-exit-host' : '')}
       role="dialog"
       aria-modal="true"
       aria-labelledby="mode-tutorial-title"
     >
       {layoutMobile ? (
-        <>
-          {spot ? (
-            <TutorialMobileSpotlight
-              spot={spot}
-              visible={showMotion}
-              onDismiss={closeTutorial}
-              motionClass={stepMotionClass}
-              sheetHeight={sheetHeight}
-            />
-          ) : (
-            <button
-              type="button"
-              className={
-                'tutorial-dim-panel pointer-events-auto absolute inset-0 transition-opacity duration-300 ' +
-                (showMotion ? 'opacity-100' : 'opacity-0')
-              }
-              onClick={closeTutorial}
-              aria-label="Cerrar tutorial"
-            />
-          )}
-
-          <div
-            ref={sheetRef}
-            className={
-              'tutorial-mobile-sheet pointer-events-auto fixed inset-x-0 bottom-0 z-[260] border-t border-pastel-ink/10 px-4 pt-2 ' +
-              cardEnterClass
-            }
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="tutorial-mobile-handle" aria-hidden="true" />
-            <div className="pb-1 pt-3">
-              <TutorialCardContent {...cardProps} compact />
-            </div>
-          </div>
-        </>
+        isMobileIntro ? (
+          <MobileTutorialIntro
+            {...cardProps}
+            showMotion={showMotion}
+            closing={closing}
+          />
+        ) : (
+          <MobileTutorialCoach
+            {...cardProps}
+            spot={spot}
+            showMotion={showMotion}
+            stepMotionClass={stepMotionClass}
+            closing={closing}
+            footerRef={footerRef}
+          />
+        )
       ) : (
-        <>
+        <div className="pointer-events-none fixed inset-0 z-[250]">
           {spot ? (
             <>
               <TutorialDimPanels
@@ -703,7 +1004,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
           >
             <TutorialCardContent {...cardProps} />
           </div>
-        </>
+        </div>
       )}
     </div>,
     document.body,

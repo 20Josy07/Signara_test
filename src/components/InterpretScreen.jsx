@@ -622,21 +622,6 @@ export default function InterpretScreen({ onBack, onHome }) {
                     {scriptsError && (
                       <CameraOverlay icon="⚠️" title="Error cargando MediaPipe" subtitle={scriptsError} />
                     )}
-                    {scriptsLoaded && cameraConsent === null && (
-                      <CameraPermissionPrompt
-                        onAccept={acceptCameraPermission}
-                        onDecline={declineCameraPermission}
-                      />
-                    )}
-                    {scriptsLoaded && cameraConsent === 'declined' && !cameraOk && (
-                      <CameraOverlay
-                        icon="📷"
-                        title="Cámara no activada"
-                        subtitle="Sin permiso de cámara no podemos interpretar tus señas. Puedes concederlo cuando quieras."
-                        actionLabel="Conceder permisos"
-                        onAction={acceptCameraPermission}
-                      />
-                    )}
                     {scriptsLoaded && cameraConsent === 'accepted' && !cameraOk && !cameraError && (
                       <CameraOverlay icon="📷" title="Conectando cámara…" />
                     )}
@@ -683,6 +668,22 @@ export default function InterpretScreen({ onBack, onHome }) {
                       {running ? 'REC' : cameraOk ? 'Lista' : '…'}
                     </div>
                   </div>
+
+                  {scriptsLoaded && cameraConsent === null && (
+                    <CameraPermissionPrompt
+                      onAccept={acceptCameraPermission}
+                      onDecline={declineCameraPermission}
+                    />
+                  )}
+                  {scriptsLoaded && cameraConsent === 'declined' && !cameraOk && (
+                    <CameraOverlay
+                      icon="📷"
+                      title="Cámara no activada"
+                      subtitle="Sin permiso de cámara no podemos interpretar tus señas. Puedes concederlo cuando quieras."
+                      actionLabel="Conceder permisos"
+                      onAction={acceptCameraPermission}
+                    />
+                  )}
 
                   {/* Controles */}
                   <div className="flex flex-wrap items-center gap-3 border-t-2 border-white/40 px-4 py-4 sm:px-5" data-tutorial="interpret-start">
@@ -868,26 +869,28 @@ function OutputCard({ title, empty, emptyIcon, hasContent, children }) {
 
 function CameraPermissionPrompt({ onAccept, onDecline }) {
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-pastel-ink/80 p-6 backdrop-blur-sm">
-      <div className="max-w-sm rounded-2xl border-2 border-pastel-blue-line bg-[#FAF6EC] p-5 text-center shadow-xl">
-        <p className="text-3xl">📷</p>
-        <p className="mt-2 text-lg font-extrabold text-pastel-ink">Necesitamos tu cámara</p>
-        <p className="mt-2 text-sm leading-relaxed text-pastel-sub">
+    <div className="absolute inset-0 z-30 flex items-center justify-center overflow-y-auto bg-pastel-ink/78 p-3 backdrop-blur-sm sm:p-5">
+      <div className="my-auto w-full max-w-sm rounded-2xl border-2 border-pastel-blue-line bg-[#FAF6EC] p-4 text-center shadow-xl sm:p-5">
+        <p className="text-2xl sm:text-3xl" aria-hidden="true">
+          📷
+        </p>
+        <p className="mt-2 text-base font-extrabold text-pastel-ink sm:text-lg">Necesitamos tu cámara</p>
+        <p className="mt-2 text-xs leading-relaxed text-pastel-sub sm:text-sm">
           Para interpretar lengua de señas, Signara necesita acceso a la cámara de tu dispositivo.
           Si no concedes el permiso, esta función no estará disponible.
         </p>
-        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+        <div className="mt-4 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:justify-center">
           <button
             type="button"
             onClick={onAccept}
-            className="motion-press inline-flex h-11 items-center justify-center rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white transition hover:brightness-110"
+            className="motion-press inline-flex h-11 w-full items-center justify-center rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white transition hover:brightness-110 sm:w-auto"
           >
             Conceder permisos
           </button>
           <button
             type="button"
             onClick={onDecline}
-            className="motion-press inline-flex h-11 items-center justify-center rounded-xl border-2 border-pastel-ink/15 bg-white px-5 text-sm font-bold text-pastel-sub transition hover:text-pastel-ink"
+            className="motion-press inline-flex h-11 w-full items-center justify-center rounded-xl border-2 border-pastel-ink/15 bg-white px-5 text-sm font-bold text-pastel-sub transition hover:text-pastel-ink sm:w-auto"
           >
             Ahora no
           </button>
@@ -899,19 +902,25 @@ function CameraPermissionPrompt({ onAccept, onDecline }) {
 
 function CameraOverlay({ icon, title, subtitle, actionLabel, onAction }) {
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-pastel-ink/80 p-6 text-center backdrop-blur-sm">
-      <span className="text-4xl">{icon}</span>
-      <p className="mt-3 text-base font-extrabold text-white">{title}</p>
-      {subtitle && <p className="mt-2 max-w-xs text-sm font-semibold text-white/80">{subtitle}</p>}
-      {actionLabel && onAction && (
-        <button
-          type="button"
-          onClick={onAction}
-          className="motion-press mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white transition hover:brightness-110"
-        >
-          {actionLabel}
-        </button>
-      )}
+    <div className="absolute inset-0 z-30 flex items-center justify-center overflow-y-auto bg-pastel-ink/78 p-3 text-center backdrop-blur-sm sm:p-5">
+      <div className="my-auto w-full max-w-sm rounded-2xl border-2 border-pastel-blue-line bg-[#FAF6EC] p-4 shadow-xl sm:p-5">
+        <span className="text-3xl sm:text-4xl" aria-hidden="true">
+          {icon}
+        </span>
+        <p className="mt-3 text-base font-extrabold text-pastel-ink sm:text-lg">{title}</p>
+        {subtitle && (
+          <p className="mt-2 text-xs font-semibold leading-relaxed text-pastel-sub sm:text-sm">{subtitle}</p>
+        )}
+        {actionLabel && onAction && (
+          <button
+            type="button"
+            onClick={onAction}
+            className="motion-press mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white transition hover:brightness-110 sm:w-auto"
+          >
+            {actionLabel}
+          </button>
+        )}
+      </div>
     </div>
   )
 }

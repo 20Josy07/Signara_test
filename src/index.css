@@ -120,26 +120,73 @@ body {
     }
   }
 
-  .tutorial-mobile-sheet {
-    border-radius: 1.75rem 1.75rem 0 0;
+  .tutorial-mobile-intro {
+    animation: tutorial-mobile-enter 0.35s cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .tutorial-mobile-header {
+    background: rgba(250, 246, 236, 0.96);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 1px 0 rgba(45, 42, 38, 0.06);
+  }
+
+  .tutorial-mobile-footer {
     background: #faf6ec;
-    box-shadow: 0 -16px 48px -12px rgba(45, 42, 38, 0.28);
+    border-top: 1px solid rgba(45, 42, 38, 0.08);
+    box-shadow: 0 -14px 40px -10px rgba(45, 42, 38, 0.18);
     padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
   }
 
-  .tutorial-mobile-handle {
-    width: 2.75rem;
-    height: 0.28rem;
-    margin-inline: auto;
-    border-radius: 999px;
-    background: rgba(45, 42, 38, 0.14);
+  .tutorial-mobile-dim {
+    background-color: rgba(45, 42, 38, 0.78);
   }
 
-  .tutorial-mobile-spotlight {
+  .tutorial-mobile-cutout-hole {
+    border: none;
+    padding: 0;
+    border-radius: 1rem;
+    background: transparent;
+    box-shadow: 0 0 0 9999px rgba(45, 42, 38, 0.78);
+  }
+
+  .tutorial-mobile-cutout-ring {
     border-radius: 1rem;
     box-shadow:
       0 0 0 2px rgba(255, 255, 255, 0.95),
-      0 0 0 5px rgba(126, 100, 201, 0.55);
+      0 0 0 5px rgba(126, 100, 201, 0.5);
+  }
+
+  .tutorial-mobile-cutout-label {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 2px solid rgba(126, 100, 201, 0.35);
+    background: #faf6ec;
+    padding: 0.2rem 0.65rem;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #7e64c9;
+    box-shadow: 0 6px 16px -8px rgba(45, 42, 38, 0.45);
+  }
+
+  @keyframes tutorial-mobile-enter {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tutorial-mobile-intro {
+      animation: none;
+    }
   }
 
   /* Material Motion — interacción y listas escalonadas */
