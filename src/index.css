@@ -120,6 +120,28 @@ body {
     }
   }
 
+  .tutorial-mobile-sheet {
+    border-radius: 1.75rem 1.75rem 0 0;
+    background: #faf6ec;
+    box-shadow: 0 -16px 48px -12px rgba(45, 42, 38, 0.28);
+    padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .tutorial-mobile-handle {
+    width: 2.75rem;
+    height: 0.28rem;
+    margin-inline: auto;
+    border-radius: 999px;
+    background: rgba(45, 42, 38, 0.14);
+  }
+
+  .tutorial-mobile-spotlight {
+    border-radius: 1rem;
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 0.95),
+      0 0 0 5px rgba(126, 100, 201, 0.55);
+  }
+
   /* Material Motion — interacción y listas escalonadas */
   .motion-press {
     transition:

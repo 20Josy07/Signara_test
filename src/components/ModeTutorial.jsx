@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMotionExit, MODAL_EXIT_MS } from '../hooks/useMotionExit.js'
 
@@ -22,7 +22,7 @@ const DIM_PANEL =
 
 const CARD_WIDTH = 320
 const CARD_HEIGHT_EST = 300
-const MOBILE_CARD_RESERVE = 292
+const MOBILE_SHEET_FALLBACK = 240
 const MOBILE_BREAKPOINT = 640
 const VIEW_MARGIN = 16
 const CARD_GAP = 14
@@ -38,7 +38,7 @@ function isMobileLayout() {
 
 function measureSpot(el, pad = 10) {
   const mobile = isMobileLayout()
-  const edgePad = mobile ? 6 : pad
+  const edgePad = mobile ? 8 : pad
   const r = el.getBoundingClientRect()
   return {
     top: r.top - edgePad,
@@ -72,17 +72,20 @@ function applyScrollLock(scrollY = window.scrollY) {
   document.body.style.width = '100%'
 }
 
-function scrollTargetIntoView(el, { animate = false, onFrame, mobile = isMobileLayout() } = {}) {
+function scrollTargetIntoView(
+  el,
+  { animate = false, onFrame, mobile = isMobileLayout(), sheetHeight = MOBILE_SHEET_FALLBACK } = {},
+) {
   releaseScrollLock()
 
   if (mobile) {
     const r = el.getBoundingClientRect()
-    const maxBottom = window.innerHeight - MOBILE_CARD_RESERVE
+    const spotlightMax = window.innerHeight - sheetHeight - 16
 
-    if (r.bottom > maxBottom) {
-      window.scrollBy({ top: r.bottom - maxBottom + 12, behavior: animate ? 'smooth' : 'auto' })
-    } else if (r.top < VIEW_MARGIN) {
-      window.scrollBy({ top: r.top - VIEW_MARGIN, behavior: animate ? 'smooth' : 'auto' })
+    if (r.bottom > spotlightMax) {
+      window.scrollBy({ top: r.bottom - spotlightMax + 8, behavior: animate ? 'smooth' : 'auto' })
+    } else if (r.top < 12) {
+      window.scrollBy({ top: r.top - 12, behavior: animate ? 'smooth' : 'auto' })
     }
   } else {
     el.scrollIntoView({
@@ -117,10 +120,11 @@ function scrollTargetIntoView(el, { animate = false, onFrame, mobile = isMobileL
   })
 }
 
-function targetNeedsScroll(el, mobile = isMobileLayout()) {
+function targetNeedsScroll(el, mobile = isMobileLayout(), sheetHeight = MOBILE_SHEET_FALLBACK) {
   const r = el.getBoundingClientRect()
   if (mobile) {
-    return r.top < VIEW_MARGIN || r.bottom > window.innerHeight - MOBILE_CARD_RESERVE
+    const spotlightMax = window.innerHeight - sheetHeight - 16
+    return r.top < 12 || r.bottom > spotlightMax
   }
   const margin = 56
   return r.top < margin || r.bottom > window.innerHeight - margin
@@ -138,16 +142,6 @@ function cardOverlapsSpot(cardLeft, cardTop, cardWidth, spot) {
 }
 
 function cardStyleForSpot(spot) {
-  if (spot.mobile || isMobileLayout()) {
-    return {
-      left: VIEW_MARGIN,
-      right: VIEW_MARGIN,
-      bottom: Math.max(VIEW_MARGIN, 12),
-      width: 'auto',
-      maxWidth: 'none',
-    }
-  }
-
   const width = Math.min(CARD_WIDTH, Math.max(260, window.innerWidth - VIEW_MARGIN * 2))
   const spotCenterX = spot.left + spot.width / 2
   const preferRight = spotCenterX < window.innerWidth / 2
@@ -193,9 +187,8 @@ function cardStyleForSpot(spot) {
 function TutorialDimPanels({ spot, visible, onDismiss, motionClass }) {
   if (!spot) return null
 
-  const { top, left, width, height, mobile } = spot
+  const { top, left, width, height } = spot
   const panelMotion = visible ? 'opacity-100' : 'opacity-0'
-  const bottomReserve = mobile ? MOBILE_CARD_RESERVE : 0
 
   return (
     <>
@@ -222,16 +215,140 @@ function TutorialDimPanels({ spot, visible, onDismiss, motionClass }) {
       />
       <button
         type="button"
-        className={DIM_PANEL + ' inset-x-0 ' + panelMotion + ' ' + motionClass}
-        style={
-          bottomReserve > 0
-            ? { top: top + height, bottom: bottomReserve }
-            : { top: top + height, bottom: 0 }
-        }
+        className={DIM_PANEL + ' inset-x-0 bottom-0 ' + panelMotion + ' ' + motionClass}
+        style={{ top: top + height }}
         onClick={onDismiss}
         aria-label="Cerrar tutorial"
       />
     </>
+  )
+}
+
+function TutorialMobileSpotlight({ spot, visible, onDismiss, motionClass, sheetHeight }) {
+  if (!spot) return null
+
+  const zoneHeight = Math.max(0, window.innerHeight - sheetHeight)
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0 overflow-hidden"
+      style={{ height: zoneHeight }}
+    >
+      <TutorialDimPanels
+        spot={spot}
+        visible={visible}
+        onDismiss={onDismiss}
+        motionClass={motionClass}
+      />
+      {visible && (
+        <div
+          className={'tutorial-mobile-spotlight pointer-events-none absolute ' + motionClass}
+          style={{
+            top: spot.top,
+            left: spot.left,
+            width: spot.width,
+            height: spot.height,
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function TutorialCardContent({
+  accent,
+  step,
+  stepIndex,
+  steps,
+  isLast,
+  onClose,
+  onPrev,
+  onNext,
+  compact = false,
+}) {
+  return (
+    <div key={stepIndex} className="animate-motion-fade-through">
+      <div className="flex items-center justify-between gap-3">
+        <span
+          className={
+            'inline-flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ' +
+            accent.chip
+          }
+        >
+          Tutorial · {accent.label}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="motion-press text-xs font-bold text-pastel-sub transition hover:text-pastel-ink"
+        >
+          Saltar
+        </button>
+      </div>
+
+      <div className={compact ? 'mt-3 flex items-start gap-3' : 'mt-4'}>
+        <p className={compact ? 'shrink-0 text-2xl leading-none' : 'text-3xl'} aria-hidden="true">
+          {step.emoji}
+        </p>
+        <div className={compact ? 'min-w-0 flex-1' : ''}>
+          <h2
+            id="mode-tutorial-title"
+            className={
+              (compact ? 'text-lg leading-snug' : 'mt-2 text-xl') + ' font-extrabold text-pastel-ink'
+            }
+          >
+            {step.title}
+          </h2>
+          {!compact && (
+            <p className="mt-2 text-sm leading-relaxed text-pastel-sub">{step.body}</p>
+          )}
+        </div>
+      </div>
+
+      {compact && (
+        <p className="mt-2.5 text-sm leading-relaxed text-pastel-sub">{step.body}</p>
+      )}
+
+      <div className={compact ? 'mt-4 space-y-3' : 'mt-5 flex items-center justify-between gap-3'}>
+        <div className="flex gap-1.5">
+          {steps.map((_, i) => (
+            <span
+              key={i}
+              className={
+                'h-1.5 rounded-full transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ' +
+                (i === stepIndex ? 'w-5 bg-pastel-grape' : 'w-1.5 bg-pastel-ink/20')
+              }
+            />
+          ))}
+        </div>
+        <div className={'flex gap-2 ' + (compact ? 'w-full' : '')}>
+          {stepIndex > 0 && (
+            <button
+              type="button"
+              onClick={onPrev}
+              className={
+                'motion-press rounded-xl border-2 border-pastel-ink/15 bg-white px-3 py-2.5 text-sm font-bold text-pastel-sub ' +
+                (compact ? 'flex-1' : '')
+              }
+            >
+              Atrás
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onNext}
+            className={
+              'motion-press rounded-xl px-4 py-2.5 text-sm font-bold text-white ' +
+              accent.btn +
+              ' ' +
+              (compact ? 'flex-[2]' : '')
+            }
+          >
+            {isLast ? 'Empezar' : 'Siguiente'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -258,6 +375,8 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
   const [layoutMobile, setLayoutMobile] = useState(() =>
     typeof window !== 'undefined' ? isMobileLayout() : false,
   )
+  const [sheetHeight, setSheetHeight] = useState(MOBILE_SHEET_FALLBACK)
+  const sheetRef = useRef(null)
   const stepAnimReadyRef = useRef(false)
   const { closing, requestClose } = useMotionExit(onComplete, MODAL_EXIT_MS)
 
@@ -266,6 +385,20 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
   const isLast = stepIndex >= steps.length - 1
   const showMotion = entered && !closing
 
+  useLayoutEffect(() => {
+    if (!open || !layoutMobile || !sheetRef.current) return
+
+    const measure = () => {
+      const h = sheetRef.current?.offsetHeight
+      if (h && h > 0) setSheetHeight(h)
+    }
+
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(sheetRef.current)
+    return () => ro.disconnect()
+  }, [open, layoutMobile, stepIndex, step?.title])
+
   useEffect(() => {
     if (!open) {
       setStepIndex(0)
@@ -273,6 +406,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
       setSpot(null)
       setStepAnimReady(false)
       setSpotLive(false)
+      setSheetHeight(MOBILE_SHEET_FALLBACK)
       stepAnimReadyRef.current = false
       return
     }
@@ -358,14 +492,16 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
     const alignTarget = async () => {
       const mobile = isMobileLayout()
       setLayoutMobile(mobile)
+      const reserve = mobile ? sheetHeight : MOBILE_SHEET_FALLBACK
       const animateScroll =
-        stepIndex > 0 && stepAnimReadyRef.current && targetNeedsScroll(targetEl, mobile)
+        stepIndex > 0 && stepAnimReadyRef.current && targetNeedsScroll(targetEl, mobile, reserve)
 
       if (animateScroll) {
         setSpotLive(true)
         await scrollTargetIntoView(targetEl, {
           animate: true,
           mobile,
+          sheetHeight: reserve,
           onFrame: () => {
             if (!cancelled) setSpot(measureSpot(targetEl))
           },
@@ -375,6 +511,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
         await scrollTargetIntoView(targetEl, {
           animate: false,
           mobile,
+          sheetHeight: reserve,
           onFrame: () => {
             if (!cancelled) setSpot(measureSpot(targetEl))
           },
@@ -409,7 +546,7 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
       targetEl.style.position = prevPosition
       targetEl.style.zIndex = prevZIndex
     }
-  }, [open, stepIndex, step?.target])
+  }, [open, stepIndex, step?.target, sheetHeight])
 
   if (!open) return null
 
@@ -429,35 +566,39 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
     setStepIndex((i) => Math.max(0, i - 1))
   }
 
-  const cardStyle = spot
-    ? cardStyleForSpot(spot)
-    : layoutMobile
-      ? {
-          left: VIEW_MARGIN,
-          right: VIEW_MARGIN,
-          bottom: VIEW_MARGIN,
-          width: 'auto',
-        }
-      : {
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          maxWidth: CARD_WIDTH,
-        }
-
   const stepMotionClass = spotLive
     ? STEP_MOTION + ' ' + STEP_MOTION_LIVE
     : stepAnimReady
       ? STEP_MOTION
       : ''
 
-  const cardMotionClass = spot
-    ? spotLive
-      ? CARD_MOTION + ' ' + STEP_MOTION_LIVE
-      : stepAnimReady
-        ? CARD_MOTION
-        : ''
-    : ''
+  const cardMotionClass =
+    !layoutMobile && spot
+      ? spotLive
+        ? CARD_MOTION + ' ' + STEP_MOTION_LIVE
+        : stepAnimReady
+          ? CARD_MOTION
+          : ''
+      : ''
+
+  const cardEnterClass = closing
+    ? 'animate-motion-modal-out'
+    : showMotion && !stepAnimReady
+      ? 'animate-motion-modal-in'
+      : showMotion
+        ? ''
+        : 'scale-95 opacity-0'
+
+  const cardProps = {
+    accent,
+    step,
+    stepIndex,
+    steps,
+    isLast,
+    onClose: closeTutorial,
+    onPrev: prevStep,
+    onNext: nextStep,
+  }
 
   return createPortal(
     <div
@@ -466,114 +607,104 @@ export default function ModeTutorial({ mode, steps, open, onComplete }) {
       aria-modal="true"
       aria-labelledby="mode-tutorial-title"
     >
-      {spot ? (
+      {layoutMobile ? (
         <>
-          <TutorialDimPanels
-            spot={spot}
-            visible={showMotion}
-            onDismiss={closeTutorial}
-            motionClass={stepMotionClass}
-          />
-          {showMotion && (
-            <div
-              className={
-                'pointer-events-none absolute rounded-2xl ring-4 ring-offset-2 ring-offset-transparent ' +
-                stepMotionClass +
-                ' ' +
-                accent.ring
-              }
-              style={{
-                top: spot.top,
-                left: spot.left,
-                width: spot.width,
-                height: spot.height,
-              }}
+          {spot ? (
+            <TutorialMobileSpotlight
+              spot={spot}
+              visible={showMotion}
+              onDismiss={closeTutorial}
+              motionClass={stepMotionClass}
+              sheetHeight={sheetHeight}
             />
-          )}
-        </>
-      ) : (
-        <button
-          type="button"
-          className={
-            'tutorial-dim-panel pointer-events-auto absolute inset-0 transition-opacity duration-300 ease-[cubic-bezier(0.2,0,0,1)] ' +
-            (showMotion ? 'opacity-100' : 'opacity-0')
-          }
-          onClick={closeTutorial}
-          aria-label="Cerrar tutorial"
-        />
-      )}
-
-      <div
-        className={
-          'pointer-events-auto absolute z-10 max-h-[42vh] overflow-y-auto rounded-[1.5rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] p-4 shadow-[0_24px_50px_-20px_rgba(45,42,38,0.55)] sm:max-h-none sm:overflow-visible sm:p-6 ' +
-          cardMotionClass +
-          ' ' +
-          (closing
-            ? 'animate-motion-modal-out'
-            : showMotion && !stepAnimReady
-              ? 'animate-motion-modal-in'
-              : showMotion
-                ? ''
-                : 'scale-95 opacity-0')
-        }
-        style={cardStyle}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div key={stepIndex} className="animate-motion-fade-through">
-          <div className="flex items-start justify-between gap-3">
-            <span className={'inline-flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ' + accent.chip}>
-              Tutorial · {accent.label}
-            </span>
+          ) : (
             <button
               type="button"
+              className={
+                'tutorial-dim-panel pointer-events-auto absolute inset-0 transition-opacity duration-300 ' +
+                (showMotion ? 'opacity-100' : 'opacity-0')
+              }
               onClick={closeTutorial}
-              className="motion-press text-xs font-bold text-pastel-sub transition hover:text-pastel-ink"
-            >
-              Saltar
-            </button>
+              aria-label="Cerrar tutorial"
+            />
+          )}
+
+          <div
+            ref={sheetRef}
+            className={
+              'tutorial-mobile-sheet pointer-events-auto fixed inset-x-0 bottom-0 z-[260] border-t border-pastel-ink/10 px-4 pt-2 ' +
+              cardEnterClass
+            }
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="tutorial-mobile-handle" aria-hidden="true" />
+            <div className="pb-1 pt-3">
+              <TutorialCardContent {...cardProps} compact />
+            </div>
           </div>
-
-          <p className="mt-4 text-3xl" aria-hidden="true">
-            {step.emoji}
-          </p>
-          <h2 id="mode-tutorial-title" className="mt-2 text-xl font-extrabold text-pastel-ink">
-            {step.title}
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed text-pastel-sub">{step.body}</p>
-
-          <div className="mt-5 flex items-center justify-between gap-3">
-            <div className="flex gap-1.5">
-              {steps.map((_, i) => (
-                <span
-                  key={i}
+        </>
+      ) : (
+        <>
+          {spot ? (
+            <>
+              <TutorialDimPanels
+                spot={spot}
+                visible={showMotion}
+                onDismiss={closeTutorial}
+                motionClass={stepMotionClass}
+              />
+              {showMotion && (
+                <div
                   className={
-                    'h-1.5 rounded-full transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ' +
-                    (i === stepIndex ? 'w-5 bg-pastel-grape' : 'w-1.5 bg-pastel-ink/20')
+                    'pointer-events-none absolute rounded-2xl ring-4 ring-offset-2 ring-offset-transparent ' +
+                    stepMotionClass +
+                    ' ' +
+                    accent.ring
                   }
+                  style={{
+                    top: spot.top,
+                    left: spot.left,
+                    width: spot.width,
+                    height: spot.height,
+                  }}
                 />
-              ))}
-            </div>
-            <div className="flex gap-2">
-              {stepIndex > 0 && (
-                <button
-                  type="button"
-                  onClick={prevStep}
-                  className="motion-press rounded-xl border-2 border-pastel-ink/15 bg-white px-3 py-2 text-sm font-bold text-pastel-sub"
-                >
-                  Atrás
-                </button>
               )}
-              <button
-                type="button"
-                onClick={nextStep}
-                className={'motion-press rounded-xl px-4 py-2 text-sm font-bold text-white ' + accent.btn}
-              >
-                {isLast ? 'Empezar' : 'Siguiente'}
-              </button>
-            </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              className={
+                'tutorial-dim-panel pointer-events-auto absolute inset-0 transition-opacity duration-300 ' +
+                (showMotion ? 'opacity-100' : 'opacity-0')
+              }
+              onClick={closeTutorial}
+              aria-label="Cerrar tutorial"
+            />
+          )}
+
+          <div
+            className={
+              'pointer-events-auto absolute z-10 rounded-[1.5rem] border-2 border-pastel-ink/10 bg-[#FAF6EC] p-5 shadow-[0_24px_50px_-20px_rgba(45,42,38,0.55)] sm:p-6 ' +
+              cardMotionClass +
+              ' ' +
+              cardEnterClass
+            }
+            style={
+              spot
+                ? cardStyleForSpot(spot)
+                : {
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    maxWidth: CARD_WIDTH,
+                  }
+            }
+            onClick={(e) => e.stopPropagation()}
+          >
+            <TutorialCardContent {...cardProps} />
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>,
     document.body,
   )
