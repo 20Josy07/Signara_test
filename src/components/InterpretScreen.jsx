@@ -27,12 +27,14 @@ const MP_SCRIPTS = [
 // ── Parámetros (tuned para navegador, equivalentes a 07_gnn_predict.py) ───────
 const SEQ_LEN        = 30
 const HAND_COUNT     = 21
-const UMBRAL         = 0.75   // confianza mínima — igual que Python
-const STABILITY_NEED = 2      // predicciones iguales para confirmar (Python usa 3, navegador más lento)
-const NO_HAND_RESET  = 20     // frames sin manos → reset completo
-const SAME_SIGN_WAIT = 20     // frames de cooldown tras confirmar seña
-const MOVEMENT_MIN   = 0.002  // movimiento mínimo para acumular frame
-const MIN_FRAMES     = 5      // frames mínimos antes de predecir (Python usa 10, navegador < 30fps)
+const UMBRAL         = 0.80
+const STABILITY_NEED = 4
+const NO_HAND_RESET  = 20
+const SAME_SIGN_WAIT = 35
+const MOVEMENT_MIN   = 0.004
+const MIN_FRAMES     = 14
+const MIN_BUFFER_FILL = 0.65
+const PREDICT_COOLDOWN_MS = 400
 
 // ── Script loader ─────────────────────────────────────────────────────────────
 
@@ -129,6 +131,7 @@ export default function InterpretScreen({ onBack, onHome }) {
   const cooldownRef       = useRef(0)    // cooldown frame-based
   const lastSignRef       = useRef('')   // última seña confirmada (evita repetir)
   const apiInFlightRef    = useRef(false)
+  const lastPredictAtRef  = useRef(0)
   const mlAvailableRef    = useRef(false)
   const sentenceClearRef  = useRef(null)
 
@@ -207,9 +210,9 @@ export default function InterpretScreen({ onBack, onHome }) {
       modelComplexity:        1,
       smoothLandmarks:        true,
       enableSegmentation:     false,
-      refineFaceLandmarks:    false,  // no necesitamos cara
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence:  0.5,
+      refineFaceLandmarks:    false,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence:  0.6,
     })
     holistic.onResults(handleResults)
     holisticRef.current = holistic
@@ -374,11 +377,14 @@ export default function InterpretScreen({ onBack, onHome }) {
       runningRef.current        &&
       mlAvailableRef.current    &&
       n >= MIN_FRAMES           &&
+      n >= Math.ceil(SEQ_LEN * MIN_BUFFER_FILL) &&
       cooldownRef.current === 0 &&
-      !apiInFlightRef.current
+      !apiInFlightRef.current   &&
+      Date.now() - lastPredictAtRef.current >= PREDICT_COOLDOWN_MS
     ) {
       const bufferCopy = padBuffer([...landmarkBufferRef.current])
       apiInFlightRef.current = true
+      lastPredictAtRef.current = Date.now()
 
       ;(async () => {
         try {
@@ -438,6 +444,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     cooldownRef.current       = 0
     lastSignRef.current       = ''
     apiInFlightRef.current    = false
+    lastPredictAtRef.current  = 0
     setBufferLen(0)
     setInCooldown(false)
     setDisplaySign('')
@@ -458,6 +465,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     cooldownRef.current       = 0
     lastSignRef.current       = ''
     apiInFlightRef.current    = false
+    lastPredictAtRef.current  = 0
     setLatest(null)
     setHistory([])
     setSentence([])
@@ -488,7 +496,8 @@ export default function InterpretScreen({ onBack, onHome }) {
     if (!mlMode)                   return '⚠ Servidor IA no conectado'
     if (!handVisible)              return 'Muestra una mano'
     if (displaySign && inCooldown) return `${displaySign.replace(/_/g, ' ')} · ${Math.round(displayConf * 100)}%`
-    if (bufferLen >= MIN_FRAMES)   return 'Detectando...'
+    if (bufferLen > 0 && bufferLen < Math.ceil(SEQ_LEN * MIN_BUFFER_FILL)) return 'Completa la seña…'
+    if (bufferLen >= MIN_FRAMES)   return 'Detectando…'
     if (bufferLen > 0)             return `Moviendo... ${bufferLen}/${MIN_FRAMES}`
     return 'Haz la seña'
   })()
@@ -719,7 +728,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                 {!running && !history.length && (
                   <div className="rounded-2xl border-2 border-dashed border-pastel-blue-line bg-pastel-blue/40 px-4 py-4 text-center">
                     <p className="text-sm font-bold text-pastel-ink">
-                      Pulsa <strong className="text-pastel-grape">Empezar a interpretar</strong> y haz una seña frente a la cámara
+                      Pulsa <strong className="text-pastel-grape">Empezar a interpretar</strong> y mantén cada seña unos segundos, clara y estable, antes de cambiar.
                     </p>
                   </div>
                 )}

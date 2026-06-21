@@ -20,15 +20,20 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
 from core.gnn_model import GCN_LSTM, N_NODES, N_FEATURES, SEQ_LEN
+from core.preprocess import normalize_sequence
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
-EPOCHS      = 120
-BATCH_SIZE  = 16
-LR          = 1e-3
-DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
-MODEL_PATH  = "models/signara_gnn.pt"
-LABEL_PATH  = "models/labels_gnn.json"
+EPOCHS           = 120
+BATCH_SIZE       = 16
+LR               = 1e-3
+PATIENCE         = 15
+AUGMENT_COPIES   = 2
+NORMALIZE_INPUTS = True
+DEVICE           = "cuda" if torch.cuda.is_available() else "cpu"
+MODEL_PATH       = "models/signara_gnn.pt"
+LABEL_PATH       = "models/labels_gnn.json"
+META_PATH        = "models/signara_gnn_meta.json"
 
 print(f"⚙  Dispositivo: {DEVICE}")
 
@@ -77,6 +82,23 @@ def df_to_tensor(df_sample):
     return X   # (30, 42, 4)
 
 
+def augment_sample(x: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """Augmentación ligera: ruido + jitter temporal."""
+    out = x.copy()
+
+    noise = rng.normal(0, 0.012, size=out[:, :, :3].shape).astype(np.float32)
+    out[:, :, :3] += noise
+
+    if rng.random() < 0.35:
+        shift = int(rng.integers(-2, 3))
+        out = np.roll(out, shift, axis=0)
+
+    if NORMALIZE_INPUTS:
+        out = normalize_sequence(out)
+
+    return out
+
+
 class SignGraphDataset(Dataset):
     def __init__(self, samples, labels):
         self.samples = samples   # lista de arrays (30, 42, 4)
@@ -116,6 +138,8 @@ total  = len(grupos)
 
 for i, ((label, persona, muestra_id), group) in enumerate(grupos):
     x = df_to_tensor(group)
+    if NORMALIZE_INPUTS:
+        x = normalize_sequence(x)
     y = int(le.transform([label])[0])
     samples_X.append(x)
     samples_y.append(y)
@@ -124,14 +148,22 @@ for i, ((label, persona, muestra_id), group) in enumerate(grupos):
 
 print(f"\n✅ {len(samples_X)} samples listos")
 
-# ─── Split train / test ───────────────────────────────────────────────────────
+# ─── Augmentación train ───────────────────────────────────────────────────────
 
-X_train, X_test, y_train, y_test = train_test_split(
+rng = np.random.default_rng(42)
+X_train_raw, X_test, y_train_raw, y_test = train_test_split(
     samples_X, samples_y,
     test_size=0.15,
     stratify=samples_y,
-    random_state=42
+    random_state=42,
 )
+
+X_train = list(X_train_raw)
+y_train = list(y_train_raw)
+for x, y in zip(X_train_raw, y_train_raw):
+    for _ in range(AUGMENT_COPIES):
+        X_train.append(augment_sample(x, rng))
+        y_train.append(y)
 
 train_ds = SignGraphDataset(X_train, y_train)
 test_ds  = SignGraphDataset(X_test,  y_test)
@@ -151,14 +183,23 @@ print(f"   Clases        : {clases}")
 print(f"   Parámetros    : {total_params:,}")
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=1e-4)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
-criterion = nn.CrossEntropyLoss()
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode="max", factor=0.5, patience=8, min_lr=1e-5
+)
+
+class_counts = np.bincount(y_train_raw, minlength=len(clases))
+class_weights = 1.0 / np.maximum(class_counts, 1)
+class_weights = class_weights / class_weights.sum() * len(clases)
+weight_tensor = torch.FloatTensor(class_weights).to(DEVICE)
+criterion = nn.CrossEntropyLoss(weight=weight_tensor)
 
 # ─── Entrenamiento ────────────────────────────────────────────────────────────
 
-print(f"\n🚀 Iniciando entrenamiento ({EPOCHS} épocas)...\n")
+print(f"\n🚀 Iniciando entrenamiento ({EPOCHS} épocas)...")
+print(f"   Normalización: {NORMALIZE_INPUTS} | Augment x{AUGMENT_COPIES + 1} train\n")
 
 best_val_acc = 0.0
+epochs_no_improve = 0
 
 for epoch in range(1, EPOCHS + 1):
 
@@ -177,7 +218,7 @@ for epoch in range(1, EPOCHS + 1):
         train_loss    += loss.item() * len(xb)
         train_correct += (logits.argmax(1) == yb).sum().item()
 
-    scheduler.step()
+    t_acc = train_correct / len(train_ds) * 100
 
     # ── Validación ─────────────────────────────────────────────────────────
     model.eval()
@@ -191,18 +232,25 @@ for epoch in range(1, EPOCHS + 1):
             val_loss    += criterion(logits, yb).item() * len(xb)
             val_correct += (logits.argmax(1) == yb).sum().item()
 
-    t_acc = train_correct / len(train_ds) * 100
-    v_acc = val_correct   / len(test_ds)  * 100
+    v_acc = val_correct / len(test_ds) * 100
+    scheduler.step(v_acc)
 
     marker = " ⭐" if v_acc > best_val_acc else ""
     if v_acc > best_val_acc:
         best_val_acc = v_acc
+        epochs_no_improve = 0
         torch.save(model.state_dict(), MODEL_PATH)
+    else:
+        epochs_no_improve += 1
 
     if epoch % 5 == 0 or epoch == 1:
         print(f"Epoch {epoch:03d}/{EPOCHS} | "
               f"loss {train_loss/len(train_ds):.4f} | "
               f"train {t_acc:.1f}% | val {v_acc:.1f}%{marker}")
+
+    if epochs_no_improve >= PATIENCE:
+        print(f"\n⏹  Early stopping en epoch {epoch} (sin mejora {PATIENCE} épocas)")
+        break
 
 # ─── Guardar labels ───────────────────────────────────────────────────────────
 
@@ -210,7 +258,20 @@ os.makedirs("models", exist_ok=True)
 with open(LABEL_PATH, "w", encoding="utf-8") as f:
     json.dump(clases, f, ensure_ascii=False, indent=4)
 
+with open(META_PATH, "w", encoding="utf-8") as f:
+    json.dump(
+        {
+            "normalize_inputs": NORMALIZE_INPUTS,
+            "best_val_acc": round(best_val_acc, 2),
+            "classes": clases,
+        },
+        f,
+        ensure_ascii=False,
+        indent=2,
+    )
+
 print(f"\n✅ ENTRENAMIENTO COMPLETADO")
 print(f"   Mejor val acc : {best_val_acc:.1f}%")
 print(f"   Modelo        → {MODEL_PATH}")
 print(f"   Labels        → {LABEL_PATH}")
+print(f"   Meta          → {META_PATH}")
