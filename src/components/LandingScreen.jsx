@@ -222,7 +222,7 @@ export default function LandingScreen({ onStart }) {
             <TrustBadge color="purple" icon={<BoltIcon />} title="Tiempo real" description="Traduce e interpreta al instante." />
             <TrustBadge color="green" icon={<CheckIcon />} title="Sin registro" description="Entra y úsalo al momento." />
             <TrustBadge color="blue" icon={<GlobeIcon />} title="En tu navegador" description="Nada que instalar." />
-            <TrustBadge color="yellow" icon={<CodeIcon />} title="Código abierto" description="Transparente y comunitario." />
+            <TrustBadge color="yellow" icon={<AvatarIcon />} title="3 intérpretes" description="Alex, Anuar y Grace incluidos." />
           </div>
         </div>
       </section>
@@ -640,14 +640,6 @@ function GlobeIcon() {
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="9" />
       <path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" />
-    </svg>
-  )
-}
-
-function CodeIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13 6l-2 12" />
     </svg>
   )
 }
