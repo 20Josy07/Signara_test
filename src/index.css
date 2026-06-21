@@ -85,7 +85,7 @@ body {
     }
   }
 
-  /* Tutorial: oscurece todo excepto el hueco del spotlight */
+  /* Tutorial unificado (móvil + desktop) */
   .tutorial-dim-panel {
     background-color: rgba(45, 42, 38, 0.72);
   }
@@ -102,20 +102,8 @@ body {
     transition: none;
   }
 
-  .tutorial-card-motion {
-    transition:
-      top 0.48s cubic-bezier(0.2, 0, 0, 1),
-      left 0.48s cubic-bezier(0.2, 0, 0, 1),
-      width 0.48s cubic-bezier(0.2, 0, 0, 1);
-  }
-
-  .tutorial-card-motion.tutorial-step-motion--live {
-    transition: none;
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    .tutorial-step-motion,
-    .tutorial-card-motion {
+    .tutorial-step-motion {
       transition: none !important;
     }
   }
