@@ -273,16 +273,18 @@ export default function LandingScreen({ onStart }) {
       </section>
       </main>
 
-      <footer className="relative border-t border-pastel-ink/10 bg-pastel-ink/[0.04] px-4 py-10 md:px-6">
-        <div className="mx-auto max-w-6xl text-center">
-          <p className="text-base font-extrabold text-pastel-grape">Signara</p>
-          <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-pastel-sub">
-            Traducción e interpretación de lengua de señas, accesible desde el navegador.
-          </p>
-          <div className="mx-auto mt-5 h-px max-w-xs bg-pastel-ink/10" aria-hidden="true" />
-          <p className="mt-5 text-[11px] text-pastel-sub/70">
-            © {new Date().getFullYear()} Signara · Hecho con accesibilidad en mente
-          </p>
+      <footer className="relative px-4 pb-8 pt-6 md:px-6 md:pb-10">
+        <div className="mx-auto max-w-6xl">
+          <div
+            className="h-px bg-gradient-to-r from-transparent via-pastel-ink/10 to-transparent"
+            aria-hidden="true"
+          />
+          <div className="mt-6 flex flex-col items-center justify-between gap-2 sm:flex-row sm:gap-4">
+            <p className="text-lg font-extrabold tracking-tight text-pastel-grape sm:text-xl">Signara</p>
+            <p className="text-[11px] font-medium text-pastel-sub/60">
+              © {new Date().getFullYear()} · Comunicación sin barreras
+            </p>
+          </div>
         </div>
       </footer>
     </div>
