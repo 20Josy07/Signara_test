@@ -222,7 +222,7 @@ export default function LandingScreen({ onStart }) {
             <TrustBadge color="purple" icon={<BoltIcon />} title="Tiempo real" description="Traduce e interpreta al instante." />
             <TrustBadge color="green" icon={<CheckIcon />} title="Sin registro" description="Entra y úsalo al momento." />
             <TrustBadge color="blue" icon={<GlobeIcon />} title="En tu navegador" description="Nada que instalar." />
-            <TrustBadge color="yellow" icon={<AvatarIcon />} title="3 intérpretes" description="Alex, Anuar y Grace incluidos." />
+            <TrustBadge color="yellow" icon={<ChatIcon />} title="Ida y vuelta" description="Traduce e interpreta señas." />
           </div>
         </div>
       </section>
