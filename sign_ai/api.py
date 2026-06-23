@@ -13,6 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from core.gnn_model import (
+    COMPACT_DIM,
+    COMPACT_HAND_DIM,
+    N_NODES,
     SEQ_LEN,
     build_batch_index,
     compile_model,
@@ -20,7 +23,7 @@ from core.gnn_model import (
     get_model,
     predict_proba,
 )
-from core.gnn_legacy import GCN_LSTM, LEGACY_SEQ_LEN, predict_proba_legacy
+from core.gnn_legacy import GCN_LSTM, LEGACY_N_NODES, LEGACY_SEQ_LEN, predict_proba_legacy
 from core.confusion import evaluate_prediction
 from core.preprocess import sequence_compact_to_gnn
 
@@ -32,7 +35,7 @@ ANIM_DIR = Path(__file__).parent / "animations"
 UMBRAL_CONFIANZA = float(os.getenv("SIGNARA_UMBRAL", "0.80"))
 MARGEN_TOP2 = float(os.getenv("SIGNARA_MARGEN_TOP2", "0.16"))
 
-app = FastAPI(title="Signara ML API — GAT+Transformer", version="3.1.0")
+app = FastAPI(title="Signara ML API — GAT+Face", version="4.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -67,8 +70,19 @@ def _prepare_frames(frames: list[list[float]]) -> np.ndarray:
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Frames inválidos: {exc}") from exc
 
-    if data.ndim != 2 or data.shape[1] != 126:
-        raise HTTPException(status_code=422, detail=f"Shape esperado (N, 126), recibido {data.shape}.")
+    if data.ndim != 2:
+        raise HTTPException(status_code=422, detail=f"Shape esperado (N, D), recibido {data.shape}.")
+
+    legacy = _model_type == "GCN+LSTM"
+    allowed_dims = (COMPACT_HAND_DIM, COMPACT_DIM) if not legacy else (COMPACT_HAND_DIM, COMPACT_DIM)
+    if data.shape[1] not in allowed_dims:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Dimensión esperada {allowed_dims}, recibido {data.shape[1]}.",
+        )
+
+    if legacy:
+        data = data[:, :COMPACT_HAND_DIM]
 
     if data.shape[0] < seq_len:
         raise HTTPException(
@@ -87,7 +101,8 @@ def _predict_from_frames(frames: list[list[float]]) -> dict:
         raise HTTPException(status_code=503, detail="Modelo no disponible.")
 
     data = _prepare_frames(frames)
-    gnn_seq = sequence_compact_to_gnn(data, normalize=_normalize_inputs)
+    hands_only = _model_type == "GCN+LSTM"
+    gnn_seq = sequence_compact_to_gnn(data, normalize=_normalize_inputs, hands_only=hands_only)
 
     if _model_type == "GAT+Transformer":
         probs, _ = predict_proba(_model, _edge_index, gnn_seq, batch_index=_batch_index)
@@ -154,8 +169,8 @@ async def load_model():
             return
 
     print(
-        f"   SEQ_LEN={_model_seq_len()} | normalización={_normalize_inputs} | "
-        f"umbral={UMBRAL_CONFIANZA} | margen top2={MARGEN_TOP2}"
+        f"   SEQ_LEN={_model_seq_len()} | nodos={LEGACY_N_NODES if _model_type == 'GCN+LSTM' else N_NODES} | "
+        f"normalización={_normalize_inputs} | umbral={UMBRAL_CONFIANZA} | margen top2={MARGEN_TOP2}"
     )
 
 
@@ -177,6 +192,8 @@ def health():
         "model_type": _model_type or "none",
         "labels": _labels,
         "seq_len": _model_seq_len() if _model else SEQ_LEN,
+        "compact_dim": COMPACT_HAND_DIM if _model_type == "GCN+LSTM" else COMPACT_DIM,
+        "n_nodes": LEGACY_N_NODES if _model_type == "GCN+LSTM" else N_NODES,
         "umbral_confianza": UMBRAL_CONFIANZA,
         "margen_top2": MARGEN_TOP2,
         "normalize_inputs": _normalize_inputs,

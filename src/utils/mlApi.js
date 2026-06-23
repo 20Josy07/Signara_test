@@ -1,3 +1,5 @@
+import { COMPACT_DIM } from '../data/faceIdx.js'
+
 export const ML_API_URL =
   import.meta.env.VITE_ML_API_URL ||
   (import.meta.env.PROD
@@ -8,9 +10,9 @@ export const ML_WS_URL = ML_API_URL.replace(/^http/, 'ws') + '/ws/predict'
 
 const CACHE_TTL_MS = 5 * 60 * 1000
 
-/** @type {{ ok: boolean, at: number, seqLen?: number } | null} */
+/** @type {{ ok: boolean, at: number, seqLen?: number, compactDim?: number } | null} */
 let cached = null
-/** @type {Promise<{ ok: boolean, at: number, seqLen?: number }> | null} */
+/** @type {Promise<{ ok: boolean, at: number, seqLen?: number, compactDim?: number }> | null} */
 let inflight = null
 
 export function getMlApiCache() {
@@ -30,12 +32,13 @@ export function checkMlApiHealth({ force = false } = {}) {
         ok: !!data.model_loaded,
         at: Date.now(),
         seqLen: data.seq_len ?? 15,
+        compactDim: data.compact_dim ?? COMPACT_DIM,
       }
       inflight = null
       return cached
     })
     .catch(() => {
-      cached = { ok: false, at: Date.now(), seqLen: 15 }
+      cached = { ok: false, at: Date.now(), seqLen: 15, compactDim: COMPACT_DIM }
       inflight = null
       return cached
     })

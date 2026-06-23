@@ -23,9 +23,9 @@ from torch.utils.data import DataLoader, TensorDataset
 
 # Importamos tu modelo ya modificado
 try:
-    from core.gnn_model import get_model, create_edge_index
+    from core.gnn_model import N_NODES, create_edge_index, get_model
 except ImportError:
-    from sign_ai.core.gnn_model import get_model, create_edge_index
+    from sign_ai.core.gnn_model import N_NODES, create_edge_index, get_model
 
 
 class LowConfidenceBuffer:
@@ -75,7 +75,7 @@ class ContinualLearner:
         seq_len: int = 30,
         device: torch.device | str = "cpu",
         # ----- Umbrales de incertidumbre -----
-        conf_thresh: float = 0.60,
+        conf_thresh=0.55,
         entropy_thresh: float = 1.5,
         # ----- Búfer y fine‑tune -----
         buffer_max_size: int = 500,
@@ -111,7 +111,7 @@ class ContinualLearner:
         self.buffer = LowConfidenceBuffer(
             max_size=buffer_max_size,
             seq_len=seq_len,
-            num_nodes=42,          # 21 landmarks × 2 manos (fijo en tu modelo)
+            num_nodes=N_NODES,
             num_feats=4,           # x, y, z, hand_indicator
         )
         self.replay_ratio = replay_ratio
@@ -221,8 +221,8 @@ class ContinualLearner:
                 batch_unlab = torch.repeat_interleave(
                     torch.repeat_interleave(
                         torch.arange(len(unlabeled_idx), device=self.device),
-                        self.seq_len * 42),
-                    42)
+                        self.seq_len * N_NODES),
+                    N_NODES)
                 logits_unlab = self.base_model(
                     X_buf[unlabeled_idx],
                     self.edge_index,
@@ -255,7 +255,7 @@ class ContinualLearner:
         if self.replay_loader is None:
             # Aquí deberías cargar un pequeño subconjunto de tu dataset de entrenamiento
             # original. Para la demostración usamos datos aleatorios; reemplázalo.
-            dummy_x = torch.randn(500, self.seq_len * 42, 4)
+            dummy_x = torch.randn(500, self.seq_len * N_NODES, 4)
             dummy_y = torch.randint(0, self.num_classes, (500,))
             replay_ds = TensorDataset(dummy_x, dummy_y)
             self.replay_loader = DataLoader(
@@ -300,8 +300,8 @@ class ContinualLearner:
                 batch_tensor = torch.repeat_interleave(
                     torch.repeat_interleave(
                         torch.arange(batch_size_total, device=self.device),
-                        self.seq_len * 42),
-                    42)
+                        self.seq_len * N_NODES),
+                    N_NODES)
 
                 self.optimizer.zero_grad()
                 logits = self.base_model(x_cat, self.edge_index, batch_tensor)
@@ -322,13 +322,13 @@ class ContinualLearner:
         holdout_acc = None
         try:
             with torch.no_grad():
-                val_x = torch.randn(200, self.seq_len * 42, 4, device=self.device)
+                val_x = torch.randn(200, self.seq_len * N_NODES, 4, device=self.device)
                 val_y = torch.randint(0, self.num_classes, (200,), device=self.device)
                 batch_val = torch.repeat_interleave(
                     torch.repeat_interleave(
                         torch.arange(val_x.size(0), device=self.device),
-                        self.seq_len * 42),
-                    42)
+                        self.seq_len * N_NODES),
+                    N_NODES)
                 val_logits = self.base_model(val_x, self.edge_index, batch_val)
                 val_pred = val_logits.argmax(dim=-1)
                 holdout_acc = (val_pred == val_y).float().mean().item()
@@ -378,7 +378,7 @@ class ContinualLearner:
     def observe(self, x_seq_batch: torch.Tensor):
         """
         Llamarlo en cada paso de inferencia.
-        x_seq_batch: Tensor (B, SEQ_LEN*42, 4) ya en el dispositivo correcto.
+        x_seq_batch: Tensor (B, SEQ_LEN*N_NODES, 4) ya en el dispositivo correcto.
         Hace:
             - forward pass
             - calcula confianza + entropía
@@ -390,8 +390,8 @@ class ContinualLearner:
             batch = torch.repeat_interleave(
                 torch.repeat_interleave(
                     torch.arange(x_seq_batch.size(0), device=self.device),
-                    self.seq_len * 42),
-                42)
+                    self.seq_len * N_NODES),
+                N_NODES)
 
             logits = self.base_model(x_seq_batch, self.edge_index, batch)   # (B, C)
             max_prob, entropy = self._uncertainty(logits)                   # (B,) cada uno
@@ -401,6 +401,6 @@ class ContinualLearner:
 
             if idx_unc.numel() > 0:
                 for i in idx_unc.tolist():
-                    seq = x_seq_batch[i].detach().cpu()   # (SEQ_LEN*42, 4)
+                    seq = x_seq_batch[i].detach().cpu()   # (SEQ_LEN*N_NODES, 4)
                     # No tenemos etiqueta todavía → None
                     self.buffer.add(seq, label=None, pseudo=False)

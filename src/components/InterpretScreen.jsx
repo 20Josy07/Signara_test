@@ -11,6 +11,7 @@ import {
   AppPageStagger,
 } from './PageMotion.jsx'
 import { INTERPRET_TUTORIAL_STEPS } from '../data/modeTutorialSteps.js'
+import { COMPACT_DIM, COMPACT_HAND_DIM, FACE_IDX } from '../data/faceIdx.js'
 import { useModeTutorial } from '../hooks/useModeTutorial.js'
 import { ML_API_URL, checkMlApiHealth, createMlPredictSocket, getMlApiCache } from '../utils/mlApi.js'
 
@@ -78,18 +79,33 @@ function extractLandmarks(results) {
     if (landmarks && landmarks.length > 0) {
       const n = Math.min(landmarks.length, HAND_COUNT)
       for (let i = 0; i < n; i++) {
-        arr[i * 3]     = 1.0 - (landmarks[i]?.x ?? 0)  // flip x (espejo Python)
+        arr[i * 3]     = 1.0 - (landmarks[i]?.x ?? 0)
         arr[i * 3 + 1] = landmarks[i]?.y ?? 0
         arr[i * 3 + 2] = landmarks[i]?.z ?? 0
       }
     }
     return arr
   }
-  // Swap: rightHandLandmarks del navegador = mano izq anatómica → slot lh
-  //       leftHandLandmarks  del navegador = mano der anatómica → slot rh
+
+  const faceCoords = () => {
+    const arr = new Array(FACE_IDX.length * 3).fill(0)
+    const face = results.faceLandmarks
+    if (face && face.length > 0) {
+      for (let i = 0; i < FACE_IDX.length; i++) {
+        const p = face[FACE_IDX[i]]
+        if (!p) continue
+        arr[i * 3]     = 1.0 - (p.x ?? 0)
+        arr[i * 3 + 1] = p.y ?? 0
+        arr[i * 3 + 2] = p.z ?? 0
+      }
+    }
+    return arr
+  }
+
   return [
-    ...handCoords(results.rightHandLandmarks),  // slot lh (primeros 63)
-    ...handCoords(results.leftHandLandmarks),   // slot rh (últimos 63)
+    ...handCoords(results.rightHandLandmarks),
+    ...handCoords(results.leftHandLandmarks),
+    ...faceCoords(),
   ]
 }
 
@@ -97,11 +113,12 @@ function extractLandmarks(results) {
 // Equivale a: np.abs(a[:, :2] - b[:, :2]).mean() en Python (sobre nodos 42×4).
 function movBetween(prev, curr) {
   let sum = 0, count = 0
-  for (let i = 0; i < 126; i += 3) {
+  const len = Math.min(prev.length, curr.length)
+  for (let i = 0; i < len; i += 3) {
     sum += Math.abs(curr[i] - prev[i]) + Math.abs(curr[i + 1] - prev[i + 1])
     count += 2
   }
-  return sum / count
+  return count ? sum / count : 0
 }
 
 // Pad del buffer al inicio repitiendo el primer frame hasta llegar a SEQ_LEN.
@@ -128,6 +145,7 @@ export default function InterpretScreen({ onBack, onHome }) {
 
   // Pipeline refs (sin re-render)
   const seqLenRef         = useRef(DEFAULT_SEQ_LEN)
+  const compactDimRef     = useRef(COMPACT_DIM)
   const mlSocketRef       = useRef(null)
   const predictHandlerRef = useRef(null)
   const landmarkBufferRef = useRef([])
@@ -161,6 +179,7 @@ export default function InterpretScreen({ onBack, onHome }) {
   const [history,       setHistory]       = useState([])
   const [sentence,      setSentence]      = useState([])
   const [seqLen,        setSeqLen]        = useState(DEFAULT_SEQ_LEN)
+  const [compactDim,    setCompactDim]    = useState(COMPACT_DIM)
 
   const minFrames = minFramesFor(seqLen)
 
@@ -180,6 +199,10 @@ export default function InterpretScreen({ onBack, onHome }) {
         seqLenRef.current = cached.seqLen
         setSeqLen(cached.seqLen)
       }
+      if (cached.compactDim) {
+        compactDimRef.current = cached.compactDim
+        setCompactDim(cached.compactDim)
+      }
     } else {
       setMlConnecting(true)
     }
@@ -192,6 +215,10 @@ export default function InterpretScreen({ onBack, onHome }) {
       if (result.seqLen) {
         seqLenRef.current = result.seqLen
         setSeqLen(result.seqLen)
+      }
+      if (result.compactDim) {
+        compactDimRef.current = result.compactDim
+        setCompactDim(result.compactDim)
       }
     })
 
@@ -255,7 +282,7 @@ export default function InterpretScreen({ onBack, onHome }) {
       modelComplexity:        0,
       smoothLandmarks:        true,
       enableSegmentation:     false,
-      refineFaceLandmarks:    false,
+      refineFaceLandmarks:    true,
       minDetectionConfidence: 0.5,
       minTrackingConfidence:  0.5,
     })
@@ -431,6 +458,9 @@ export default function InterpretScreen({ onBack, onHome }) {
       Date.now() - lastPredictAtRef.current >= PREDICT_COOLDOWN_MS
     ) {
       const bufferCopy = padBuffer([...landmarkBufferRef.current], activeSeqLen)
+      const payload = compactDimRef.current === COMPACT_HAND_DIM
+        ? bufferCopy.map((f) => f.slice(0, COMPACT_HAND_DIM))
+        : bufferCopy
       apiInFlightRef.current = true
       lastPredictAtRef.current = Date.now()
 
@@ -464,7 +494,7 @@ export default function InterpretScreen({ onBack, onHome }) {
       }
 
       const socket = mlSocketRef.current
-      if (socket?.ready && socket.send(bufferCopy)) {
+      if (socket?.ready && socket.send(payload)) {
         predictHandlerRef.current = applyPrediction
         return
       }
@@ -474,7 +504,7 @@ export default function InterpretScreen({ onBack, onHome }) {
           const resp = await fetch(`${ML_API_URL}/predict`, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ frames: bufferCopy }),
+            body:    JSON.stringify({ frames: payload }),
           })
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
           applyPrediction(await resp.json())

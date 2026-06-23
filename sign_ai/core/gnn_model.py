@@ -1,4 +1,4 @@
-"""GAT + Transformer ligero para reconocimiento de LSC en tiempo real."""
+"""GAT + Transformer ligero con grafo manos + cara para LSC en tiempo real."""
 
 import os
 
@@ -8,9 +8,32 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATConv, global_mean_pool
 
-N_NODES = 42
+HAND_LANDMARKS_PER_HAND = 21
+HAND_TOTAL_NODES = HAND_LANDMARKS_PER_HAND * 2
+
+# Subconjunto de la malla facial MediaPipe (468 puntos → ~46 clave)
+FACE_IDX_RAW = [
+    61, 146, 91, 181, 84, 17, 314, 405, 321, 375,
+    291, 409, 270, 269, 267, 0, 37, 39, 40, 185,
+    78, 95, 88, 178, 87, 14, 317, 402, 318, 324,
+    33, 133, 159, 145, 153, 154, 155, 246, 161,
+    160, 158, 157, 173, 144,
+    70, 63, 105, 66, 107, 55, 65, 52, 53, 46,
+]
+FACE_IDX = list(dict.fromkeys(FACE_IDX_RAW))
+FACE_TOTAL_NODES = len(FACE_IDX)
+
+N_NODES = HAND_TOTAL_NODES + FACE_TOTAL_NODES
 N_FEATURES = 4
 SEQ_LEN = 15
+
+NODE_TYPE_HAND_L = 0.0
+NODE_TYPE_HAND_R = 1.0
+NODE_TYPE_FACE = 2.0
+
+COMPACT_HAND_DIM = HAND_LANDMARKS_PER_HAND * 3 * 2
+COMPACT_FACE_DIM = FACE_TOTAL_NODES * 3
+COMPACT_DIM = COMPACT_HAND_DIM + COMPACT_FACE_DIM
 
 HIDDEN_CH = 32
 OUT_CH = 32
@@ -21,21 +44,25 @@ TRANS_FF_DIM = 128
 
 
 def create_edge_index(num_nodes=N_NODES):
+    """Grafos completos dentro del bloque de manos y dentro del bloque de cara."""
     edges = []
-    for hand_start in (0, 21):
-        for i in range(num_nodes // 2):
-            for j in range(i + 1, num_nodes // 2):
-                edges += [[hand_start + i, hand_start + j], [hand_start + j, hand_start + i]]
-    for i in range(21):
-        edges += [[i, 21 + i], [21 + i, i]]
+
+    hand_end = HAND_TOTAL_NODES
+    for i in range(hand_end):
+        for j in range(i + 1, hand_end):
+            edges += [[i, j], [j, i]]
+
+    face_start = hand_end
+    face_end = face_start + FACE_TOTAL_NODES
+    for i in range(face_start, face_end):
+        for j in range(i + 1, face_end):
+            edges += [[i, j], [j, i]]
+
     return torch.tensor(edges, dtype=torch.long).t().contiguous()
 
 
 def compute_edge_attr_batch(pos, edge_index, num_nodes=N_NODES):
-    """
-    pos: [G*V, 3] coordenadas por grafo (frame).
-    Devuelve: [G*E, 3] atributos de arista vectorizados.
-    """
+    """pos: [G*V, 3] → edge_attr: [G*E, 3]."""
     src, dst = edge_index
     num_graphs = pos.size(0) // num_nodes
     pos_g = pos.view(num_graphs, num_nodes, 3)
@@ -47,7 +74,7 @@ def compute_edge_attr_batch(pos, edge_index, num_nodes=N_NODES):
     return attr.reshape(num_graphs * edge_index.size(1), 3)
 
 
-class HandGAT(nn.Module):
+class HandFaceGAT(nn.Module):
     def __init__(
         self,
         in_feats=N_FEATURES,
@@ -90,7 +117,7 @@ class SignLanguageModel(nn.Module):
         self.use_transformer = use_transformer
         self.ctc = ctc
 
-        self.backbone = HandGAT()
+        self.backbone = HandFaceGAT()
         self.backbone_out = OUT_CH
 
         if use_transformer:
@@ -148,12 +175,12 @@ def build_batch_index(batch_size, seq_len=SEQ_LEN, num_nodes=N_NODES, device=Non
     return batch
 
 
-def predict_proba(model, edge_index, gnn_seq, device=None, batch_index=None):
-    """Inferencia sobre una secuencia (seq_len, 42, 4)."""
+def predict_proba(model, edge_index, gnn_seq, device=None, batch_index=None, seq_len=SEQ_LEN):
+    """Inferencia sobre una secuencia (seq_len, N_NODES, 4)."""
     device = device or next(model.parameters()).device
     model.eval()
     x = torch.as_tensor(gnn_seq, dtype=torch.float32).reshape(-1, N_FEATURES).to(device)
-    batch = batch_index if batch_index is not None else build_batch_index(1, device=device)
+    batch = batch_index if batch_index is not None else build_batch_index(1, seq_len=seq_len, device=device)
     edge = edge_index.to(device)
     with torch.inference_mode():
         logits = model(x, edge, batch)

@@ -1,11 +1,12 @@
-"""Modelo GCN+LSTM legado para cargar checkpoints entrenados antes de GAT."""
+"""Modelo GCN+LSTM legado (solo manos, 42 nodos)."""
 
 import numpy as np
 import torch
 import torch.nn as nn
 
-from core.gnn_model import N_FEATURES, N_NODES
+from core.gnn_model import N_FEATURES
 
+LEGACY_N_NODES = 42
 LEGACY_SEQ_LEN = 30
 
 HAND_CONNECTIONS = [
@@ -18,13 +19,13 @@ HAND_CONNECTIONS = [
 
 
 def build_adjacency():
-    A = np.zeros((N_NODES, N_NODES), dtype=np.float32)
+    A = np.zeros((LEGACY_N_NODES, LEGACY_N_NODES), dtype=np.float32)
     for i, j in HAND_CONNECTIONS:
         A[i, j] = 1.0
         A[j, i] = 1.0
         A[i + 21, j + 21] = 1.0
         A[j + 21, i + 21] = 1.0
-    A += np.eye(N_NODES, dtype=np.float32)
+    A += np.eye(LEGACY_N_NODES, dtype=np.float32)
     D_inv_sqrt = np.diag(1.0 / np.sqrt(np.maximum(A.sum(axis=1), 1e-8)))
     return torch.FloatTensor(D_inv_sqrt @ A @ D_inv_sqrt)
 
