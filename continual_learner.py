@@ -22,7 +22,10 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
 # Importamos tu modelo ya modificado
-from sign_ai.core.gnn_model import get_model, create_edge_index
+try:
+    from core.gnn_model import get_model, create_edge_index
+except ImportError:
+    from sign_ai.core.gnn_model import get_model, create_edge_index
 
 
 class LowConfidenceBuffer:

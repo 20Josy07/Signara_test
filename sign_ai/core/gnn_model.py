@@ -3,6 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATConv, global_mean_pool
 
+N_NODES = 42
+N_FEATURES = 4
+SEQ_LEN = 30
+
 def create_edge_index(num_nodes=42):
     """
     Edge index for two hands (21 landmarks each).
@@ -241,7 +245,30 @@ class SignLanguageModel(nn.Module):
                 return out
 
 
-# Helper to instantiate model with recommended settings
+def build_batch_index(batch_size, seq_len=SEQ_LEN, num_nodes=N_NODES, device=None):
+    device = device or torch.device("cpu")
+    return torch.repeat_interleave(
+        torch.repeat_interleave(torch.arange(batch_size, device=device), seq_len * num_nodes),
+        num_nodes,
+    )
+
+
+def predict_proba(model, edge_index, gnn_seq, device=None):
+    """Ejecuta inferencia sobre una secuencia (seq_len, 42, 4) y devuelve probabilidades."""
+    import numpy as np
+
+    device = device or next(model.parameters()).device
+    model.eval()
+    x = torch.as_tensor(gnn_seq, dtype=torch.float32).reshape(-1, N_FEATURES).to(device)
+    batch = build_batch_index(1, device=device)
+    edge = edge_index.to(device)
+    with torch.no_grad():
+        logits = model(x, edge, batch)
+        probs = torch.softmax(logits, dim=-1)[0].cpu().numpy()
+    order = np.argsort(probs)[::-1]
+    return probs, order
+
+
 def get_model(num_classes=100, seq_len=30, ctc=False):
     """
     Returns a model configured for high accuracy and efficiency:

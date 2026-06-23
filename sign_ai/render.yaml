@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: signara
+    name: signara-test
     runtime: python
     rootDir: sign_ai
     buildCommand: pip install -r requirements_api.txt

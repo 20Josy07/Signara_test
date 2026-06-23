@@ -65,13 +65,8 @@ def sequence_compact_to_gnn(
     return seq
 
 
-def predict_logits(model, gnn_seq: np.ndarray):
+def predict_logits(model, edge_index, gnn_seq):
     """Ejecuta el modelo y devuelve probabilidades ordenadas."""
-    import torch
+    from core.gnn_model import predict_proba
 
-    x = torch.as_tensor(gnn_seq, dtype=torch.float32).unsqueeze(0)
-    with torch.no_grad():
-        logits = model(x)
-        probs = torch.softmax(logits, dim=1)[0].cpu().numpy()
-    order = np.argsort(probs)[::-1]
-    return probs, order
+    return predict_proba(model, edge_index, gnn_seq)

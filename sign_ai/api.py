@@ -1,5 +1,5 @@
 """
-Signara ML API — GNN + LSTM
+Signara ML API — GAT + Transformer
 El endpoint /predict acepta 30 frames × 126 valores (lh 63 + rh 63).
 Internamente convierte al formato GNN (30 × 42 × 4) y predice.
 
@@ -18,7 +18,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from core.gnn_model import GCN_LSTM, SEQ_LEN
+from core.gnn_model import SEQ_LEN, create_edge_index, get_model, predict_proba
+from core.gnn_legacy import GCN_LSTM, predict_proba_legacy
 from core.confusion import evaluate_prediction
 from core.preprocess import sequence_compact_to_gnn
 
@@ -34,7 +35,7 @@ MARGEN_TOP2      = float(os.getenv("SIGNARA_MARGEN_TOP2", "0.16"))
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Signara ML API — GNN", version="2.0.0")
+app = FastAPI(title="Signara ML API — GAT+Transformer", version="3.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,7 +44,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_model: GCN_LSTM | None = None
+_model = None
+_model_type: str | None = None
+_edge_index = None
 _labels: list[str] = []
 _normalize_inputs = False
 
@@ -57,11 +60,9 @@ def _load_meta() -> dict:
 
 @app.on_event("startup")
 async def load_model():
-    global _model, _labels, _normalize_inputs
+    global _model, _model_type, _edge_index, _labels, _normalize_inputs
 
-    if not os.path.exists(GNN_MODEL_PATH):
-        print(f"⚠  Modelo GNN no encontrado: {GNN_MODEL_PATH}")
-        return
+    _edge_index = create_edge_index()
 
     if not os.path.exists(GNN_LABEL_PATH):
         print(f"⚠  Labels no encontrados: {GNN_LABEL_PATH}")
@@ -73,11 +74,36 @@ async def load_model():
     meta = _load_meta()
     _normalize_inputs = bool(meta.get("normalize_inputs", False))
 
-    _model = GCN_LSTM(n_classes=len(_labels))
-    _model.load_state_dict(torch.load(GNN_MODEL_PATH, map_location="cpu"))
-    _model.eval()
+    if not os.path.exists(GNN_MODEL_PATH):
+        print(f"⚠  Modelo GNN no encontrado: {GNN_MODEL_PATH}")
+        return
 
-    print(f"✅ Modelo GNN cargado — clases: {_labels}")
+    state = torch.load(GNN_MODEL_PATH, map_location="cpu")
+    if isinstance(state, dict) and "state_dict" in state:
+        state = state["state_dict"]
+
+    gat_model = get_model(num_classes=len(_labels), seq_len=SEQ_LEN)
+    try:
+        gat_model.load_state_dict(state)
+        gat_model.eval()
+        _model = gat_model
+        _model_type = "GAT+Transformer"
+        print(f"✅ Modelo GAT+Transformer cargado — clases: {_labels}")
+    except Exception as exc:
+        print(f"⚠  Checkpoint no compatible con GAT ({exc}); probando GCN+LSTM…")
+        legacy_model = GCN_LSTM(n_classes=len(_labels))
+        try:
+            legacy_model.load_state_dict(state)
+            legacy_model.eval()
+            _model = legacy_model
+            _model_type = "GCN+LSTM"
+            print(f"✅ Modelo GCN+LSTM cargado — clases: {_labels}")
+        except Exception as legacy_exc:
+            print(f"⚠  No se pudo cargar el checkpoint: {legacy_exc}")
+            _model = None
+            _model_type = None
+            return
+
     print(f"   Normalización: {_normalize_inputs} | umbral: {UMBRAL_CONFIANZA} | margen top2: {MARGEN_TOP2}")
 
 
@@ -101,7 +127,7 @@ def health():
     return {
         "status": "ok",
         "model_loaded": _model is not None,
-        "model_type": "GNN+LSTM",
+        "model_type": _model_type or "none",
         "labels": _labels,
         "seq_len": SEQ_LEN,
         "umbral_confianza": UMBRAL_CONFIANZA,
@@ -112,7 +138,7 @@ def health():
 
 @app.post("/predict", response_model=PredictResponse)
 async def predict(req: PredictRequest):
-    if _model is None or not _labels:
+    if _model is None or not _labels or _edge_index is None:
         raise HTTPException(
             status_code=503,
             detail="Modelo no disponible.",
@@ -130,11 +156,10 @@ async def predict(req: PredictRequest):
         )
 
     gnn_seq = sequence_compact_to_gnn(data, normalize=_normalize_inputs)
-
-    x = torch.as_tensor(gnn_seq, dtype=torch.float32).unsqueeze(0)
-    with torch.no_grad():
-        logits = _model(x)
-        probs = torch.softmax(logits, dim=1)[0].cpu().numpy()
+    if _model_type == "GAT+Transformer":
+        probs, _ = predict_proba(_model, _edge_index, gnn_seq)
+    else:
+        probs, _ = predict_proba_legacy(_model, gnn_seq)
 
     prediction, confidence, margin = evaluate_prediction(
         _labels,
