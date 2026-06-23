@@ -25,16 +25,17 @@ const MP_SCRIPTS = [
   `https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@${MEDIAPIPE_DRAW_VER}/drawing_utils.js`,
 ]
 
-// ── Parámetros (tuned para ~60 fps en navegador) ─────────────────────────────
-const DEFAULT_SEQ_LEN   = 15
-const HAND_COUNT        = 21
-const UMBRAL            = 0.80
-const STABILITY_NEED    = 3
-const NO_HAND_RESET     = 20
-const SAME_SIGN_WAIT    = 25
-const MOVEMENT_MIN      = 0.004
-const MIN_BUFFER_FILL   = 0.65
-const PREDICT_COOLDOWN_MS = 120
+// ── Parámetros de reconocimiento en tiempo real ───────────────────────────────
+const DEFAULT_SEQ_LEN      = 15
+const HAND_COUNT           = 21
+const UMBRAL               = 0.80
+const UMBRAL_HIGH          = 0.88   // confianza alta → menos repeticiones necesarias
+const STABILITY_NEED       = 2      // ventanas consecutivas iguales (normal)
+const STABILITY_NEED_FAST  = 1      // con confianza ≥ UMBRAL_HIGH
+const NO_HAND_RESET        = 20
+const SAME_SIGN_WAIT       = 20
+const MIN_FRAMES_TO_PREDICT = 4     // mínimo de frames reales antes de la 1ª inferencia
+const PREDICT_COOLDOWN_MS  = 80     // ventana deslizante: inferir ~12×/s
 
 // ── Script loader ─────────────────────────────────────────────────────────────
 
@@ -109,28 +110,13 @@ function extractLandmarks(results) {
   ]
 }
 
-// Movimiento entre dos frames flat 126-valores.
-// Equivale a: np.abs(a[:, :2] - b[:, :2]).mean() en Python (sobre nodos 42×4).
-function movBetween(prev, curr) {
-  let sum = 0, count = 0
-  const len = Math.min(prev.length, curr.length)
-  for (let i = 0; i < len; i += 3) {
-    sum += Math.abs(curr[i] - prev[i]) + Math.abs(curr[i + 1] - prev[i + 1])
-    count += 2
-  }
-  return count ? sum / count : 0
-}
-
 // Pad del buffer al inicio repitiendo el primer frame hasta llegar a SEQ_LEN.
 // Igual que: while len(seq) < SEQ_LEN: seq.insert(0, seq[0]) en Python.
 function padBuffer(buffer, seqLen) {
+  if (buffer.length === 0) return []
   const padded = [...buffer]
   while (padded.length < seqLen) padded.unshift(padded[0])
   return padded.slice(-seqLen)
-}
-
-function minFramesFor(seqLen) {
-  return Math.max(7, Math.ceil(seqLen * 0.55))
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
@@ -149,9 +135,8 @@ export default function InterpretScreen({ onBack, onHome }) {
   const mlSocketRef       = useRef(null)
   const predictHandlerRef = useRef(null)
   const landmarkBufferRef = useRef([])
-  const predHistRef       = useRef([])   // historial de predicciones para estabilidad
-  const prevFrameRef      = useRef(null) // frame anterior para calcular movimiento
-  const noHandCountRef    = useRef(0)    // frames consecutivos sin manos
+  const predHistRef       = useRef([])
+  const noHandCountRef    = useRef(0)
   const cooldownRef       = useRef(0)    // cooldown frame-based
   const lastSignRef       = useRef('')   // última seña confirmada (evita repetir)
   const apiInFlightRef    = useRef(false)
@@ -172,6 +157,7 @@ export default function InterpretScreen({ onBack, onHome }) {
   const [audioOn,       setAudioOn]       = useState(true)
   const [handVisible,   setHandVisible]   = useState(false)
   const [bufferLen,     setBufferLen]     = useState(0)
+  const [liveConf,      setLiveConf]      = useState(0)
   const [inCooldown,    setInCooldown]    = useState(false)
   const [displaySign,   setDisplaySign]   = useState('')
   const [displayConf,   setDisplayConf]   = useState(0)
@@ -180,8 +166,6 @@ export default function InterpretScreen({ onBack, onHome }) {
   const [sentence,      setSentence]      = useState([])
   const [seqLen,        setSeqLen]        = useState(DEFAULT_SEQ_LEN)
   const [compactDim,    setCompactDim]    = useState(COMPACT_DIM)
-
-  const minFrames = minFramesFor(seqLen)
 
   useEffect(() => { runningRef.current = running }, [running])
   useEffect(() => { audioRef.current   = audioOn  }, [audioOn])
@@ -409,15 +393,14 @@ export default function InterpretScreen({ onBack, onHome }) {
         // Reset completo igual que Python
         landmarkBufferRef.current = []
         predHistRef.current       = []
-        prevFrameRef.current      = null
         lastSignRef.current       = ''
         cooldownRef.current       = 0
         setDisplaySign('')
         setDisplayConf(0)
         setBufferLen(0)
+        setLiveConf(0)
         setInCooldown(false)
       }
-      prevFrameRef.current = null
       return
     }
 
@@ -426,33 +409,22 @@ export default function InterpretScreen({ onBack, onHome }) {
 
     const currFrame = extractLandmarks(results)
 
-    // Movimiento respecto al frame anterior
-    let mov = 0
-    if (prevFrameRef.current !== null) {
-      mov = movBetween(prevFrameRef.current, currFrame)
-    }
-    prevFrameRef.current = currFrame
-
-    // Solo acumular frames con movimiento real (≥ MOVEMENT_MIN)
-    if (mov >= MOVEMENT_MIN) {
-      landmarkBufferRef.current.push(currFrame)
-      const maxLen = seqLenRef.current
-      if (landmarkBufferRef.current.length > maxLen) {
-        landmarkBufferRef.current.shift()
-      }
+    // Acumular cada frame con manos visibles (ventana deslizante)
+    landmarkBufferRef.current.push(currFrame)
+    const maxLen = seqLenRef.current * 2
+    if (landmarkBufferRef.current.length > maxLen) {
+      landmarkBufferRef.current.shift()
     }
 
     const n = landmarkBufferRef.current.length
     const activeSeqLen = seqLenRef.current
-    const activeMinFrames = minFramesFor(activeSeqLen)
     setBufferLen(n)
 
-    // ── Predecir cuando hay suficientes frames ───────────────────────────────
+    // ── Inferencia con ventana deslizante (no esperar a llenar SEQ_LEN) ─────
     if (
       runningRef.current        &&
       mlAvailableRef.current    &&
-      n >= activeMinFrames      &&
-      n >= Math.ceil(activeSeqLen * MIN_BUFFER_FILL) &&
+      n >= MIN_FRAMES_TO_PREDICT &&
       cooldownRef.current === 0 &&
       !apiInFlightRef.current   &&
       Date.now() - lastPredictAtRef.current >= PREDICT_COOLDOWN_MS
@@ -466,14 +438,23 @@ export default function InterpretScreen({ onBack, onHome }) {
 
       const applyPrediction = ({ prediction, confidence, is_idle, error }) => {
         if (error) return
-        if (!is_idle && prediction && confidence >= UMBRAL) {
+
+        setLiveConf(confidence)
+
+        if (is_idle || !prediction) {
+          if (confidence < 0.45) predHistRef.current = []
+          return
+        }
+
+        if (confidence >= UMBRAL) {
           predHistRef.current.push(prediction)
-          if (predHistRef.current.length > STABILITY_NEED) {
+          const need = confidence >= UMBRAL_HIGH ? STABILITY_NEED_FAST : STABILITY_NEED
+          if (predHistRef.current.length > need) {
             predHistRef.current.shift()
           }
 
           if (
-            predHistRef.current.length >= STABILITY_NEED &&
+            predHistRef.current.length >= need &&
             new Set(predHistRef.current).size === 1 &&
             prediction !== lastSignRef.current
           ) {
@@ -485,10 +466,11 @@ export default function InterpretScreen({ onBack, onHome }) {
             setDisplaySign(prediction)
             setDisplayConf(confidence)
             setBufferLen(0)
+            setLiveConf(confidence)
             setInCooldown(true)
             triggerRecognition(prediction, confidence)
           }
-        } else {
+        } else if (confidence < 0.45) {
           predHistRef.current = []
         }
       }
@@ -522,13 +504,13 @@ export default function InterpretScreen({ onBack, onHome }) {
   function startDetect() {
     landmarkBufferRef.current = []
     predHistRef.current       = []
-    prevFrameRef.current      = null
     noHandCountRef.current    = 0
     cooldownRef.current       = 0
     lastSignRef.current       = ''
     apiInFlightRef.current    = false
     lastPredictAtRef.current  = 0
     setBufferLen(0)
+    setLiveConf(0)
     setInCooldown(false)
     setDisplaySign('')
     setDisplayConf(0)
@@ -543,7 +525,6 @@ export default function InterpretScreen({ onBack, onHome }) {
   const handleReset = useCallback(() => {
     landmarkBufferRef.current = []
     predHistRef.current       = []
-    prevFrameRef.current      = null
     noHandCountRef.current    = 0
     cooldownRef.current       = 0
     lastSignRef.current       = ''
@@ -555,6 +536,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     setDisplaySign('')
     setDisplayConf(0)
     setBufferLen(0)
+    setLiveConf(0)
     setInCooldown(false)
     if (sentenceClearRef.current) clearTimeout(sentenceClearRef.current)
     window?.speechSynthesis?.cancel()
@@ -579,13 +561,19 @@ export default function InterpretScreen({ onBack, onHome }) {
     if (!mlMode)                   return '⚠ Servidor IA no conectado'
     if (!handVisible)              return 'Muestra una mano'
     if (displaySign && inCooldown) return `${displaySign.replace(/_/g, ' ')} · ${Math.round(displayConf * 100)}%`
-    if (bufferLen > 0 && bufferLen < Math.ceil(seqLen * MIN_BUFFER_FILL)) return 'Completa la seña…'
-    if (bufferLen >= minFrames)   return 'Detectando…'
-    if (bufferLen > 0)             return `Moviendo... ${bufferLen}/${minFrames}`
+    if (liveConf >= UMBRAL)        return `Reconociendo… ${Math.round(liveConf * 100)}%`
+    if (bufferLen >= MIN_FRAMES_TO_PREDICT) return `Analizando… ${Math.round(liveConf * 100)}%`
+    if (bufferLen > 0)             return 'Capturando seña…'
     return 'Haz la seña'
   })()
 
-  const bufferProgress = Math.min(100, (bufferLen / minFrames) * 100)
+  const bufferProgress = running && mlMode && handVisible && !inCooldown
+    ? Math.min(100, Math.round(
+        bufferLen < MIN_FRAMES_TO_PREDICT
+          ? (bufferLen / MIN_FRAMES_TO_PREDICT) * 25
+          : 25 + liveConf * 75
+      ))
+    : 0
   const confPct = latest ? Math.round((latest.confidence || 0) * 100) : 0
 
   const tutorial = useModeTutorial('interpret')
@@ -673,18 +661,20 @@ export default function InterpretScreen({ onBack, onHome }) {
                       </div>
                       {running && mlMode && handVisible && bufferLen > 0 && !inCooldown && (
                         <div className="shrink-0 rounded-xl border-2 border-white/60 bg-white/80 px-3 py-2">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-pastel-sub">Captura</p>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-pastel-sub">Confianza</p>
                           <div className="mt-1 flex items-center gap-2">
                             <div className="h-2 w-20 overflow-hidden rounded-full bg-pastel-blue/50">
                               <div
-                                className="h-full rounded-full transition-all duration-100"
+                                className="h-full rounded-full transition-all duration-150"
                                 style={{
                                   width: `${bufferProgress}%`,
-                                  background: bufferLen >= minFrames ? '#94D08E' : '#E9CF7E',
+                                  background: liveConf >= UMBRAL ? '#94D08E' : '#E9CF7E',
                                 }}
                               />
                             </div>
-                            <span className="text-xs font-bold tabular-nums text-pastel-ink">{bufferLen}/{minFrames}</span>
+                            <span className="text-xs font-bold tabular-nums text-pastel-ink">
+                              {liveConf > 0 ? `${Math.round(liveConf * 100)}%` : '…'}
+                            </span>
                           </div>
                         </div>
                       )}
