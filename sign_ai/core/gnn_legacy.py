@@ -6,6 +6,8 @@ import torch.nn as nn
 
 from core.gnn_model import N_FEATURES, N_NODES
 
+LEGACY_SEQ_LEN = 30
+
 HAND_CONNECTIONS = [
     (0, 1), (1, 2), (2, 3), (3, 4),
     (0, 5), (5, 6), (6, 7), (7, 8),

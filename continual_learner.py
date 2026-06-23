@@ -78,12 +78,12 @@ class ContinualLearner:
         conf_thresh: float = 0.60,
         entropy_thresh: float = 1.5,
         # ----- Búfer y fine‑tune -----
-        buffer_max_size: int = 2000,
+        buffer_max_size: int = 500,
         replay_ratio: float = 0.15,
-        fine_tune_epochs: int = 3,
-        lr_fine: float = 1e-4,
+        fine_tune_epochs: int = 2,
+        lr_fine: float = 5e-5,
         weight_decay: float = 1e-4,
-        check_interval: int = 60,          # segundos entre chequeos del búfer
+        check_interval: int = 300,
         # ----- Paths -----
         model_dir: str = "models",
         log_dir: str = "logs",

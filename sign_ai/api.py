@@ -1,11 +1,5 @@
 """
-Signara ML API — GAT + Transformer
-El endpoint /predict acepta 30 frames × 126 valores (lh 63 + rh 63).
-Internamente convierte al formato GNN (30 × 42 × 4) y predice.
-
-Uso:
-    cd sign_ai
-    uvicorn api:app --port 8000 --reload
+Signara ML API — GAT + Transformer (optimizado para baja latencia)
 """
 
 import json
@@ -14,28 +8,31 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from core.gnn_model import SEQ_LEN, create_edge_index, get_model, predict_proba
-from core.gnn_legacy import GCN_LSTM, predict_proba_legacy
+from core.gnn_model import (
+    SEQ_LEN,
+    build_batch_index,
+    compile_model,
+    create_edge_index,
+    get_model,
+    predict_proba,
+)
+from core.gnn_legacy import GCN_LSTM, LEGACY_SEQ_LEN, predict_proba_legacy
 from core.confusion import evaluate_prediction
 from core.preprocess import sequence_compact_to_gnn
 
-# ─── Rutas ────────────────────────────────────────────────────────────────────
-
 GNN_MODEL_PATH = "models/signara_gnn.pt"
 GNN_LABEL_PATH = "models/labels_gnn.json"
-GNN_META_PATH  = "models/signara_gnn_meta.json"
-ANIM_DIR       = Path(__file__).parent / "animations"
+GNN_META_PATH = "models/signara_gnn_meta.json"
+ANIM_DIR = Path(__file__).parent / "animations"
 
 UMBRAL_CONFIANZA = float(os.getenv("SIGNARA_UMBRAL", "0.80"))
-MARGEN_TOP2      = float(os.getenv("SIGNARA_MARGEN_TOP2", "0.16"))
+MARGEN_TOP2 = float(os.getenv("SIGNARA_MARGEN_TOP2", "0.16"))
 
-# ─── App ──────────────────────────────────────────────────────────────────────
-
-app = FastAPI(title="Signara ML API — GAT+Transformer", version="3.0.0")
+app = FastAPI(title="Signara ML API — GAT+Transformer", version="3.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,8 +44,13 @@ app.add_middleware(
 _model = None
 _model_type: str | None = None
 _edge_index = None
+_batch_index = None
 _labels: list[str] = []
 _normalize_inputs = False
+
+
+def _model_seq_len() -> int:
+    return LEGACY_SEQ_LEN if _model_type == "GCN+LSTM" else SEQ_LEN
 
 
 def _load_meta() -> dict:
@@ -58,11 +60,58 @@ def _load_meta() -> dict:
         return json.load(f)
 
 
+def _prepare_frames(frames: list[list[float]]) -> np.ndarray:
+    seq_len = _model_seq_len()
+    try:
+        data = np.array(frames, dtype=np.float32)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Frames inválidos: {exc}") from exc
+
+    if data.ndim != 2 or data.shape[1] != 126:
+        raise HTTPException(status_code=422, detail=f"Shape esperado (N, 126), recibido {data.shape}.")
+
+    if data.shape[0] < seq_len:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Se necesitan al menos {seq_len} frames, recibidos {data.shape[0]}.",
+        )
+
+    if data.shape[0] > seq_len:
+        data = data[-seq_len:]
+
+    return data
+
+
+def _predict_from_frames(frames: list[list[float]]) -> dict:
+    if _model is None or not _labels or _edge_index is None:
+        raise HTTPException(status_code=503, detail="Modelo no disponible.")
+
+    data = _prepare_frames(frames)
+    gnn_seq = sequence_compact_to_gnn(data, normalize=_normalize_inputs)
+
+    if _model_type == "GAT+Transformer":
+        probs, _ = predict_proba(_model, _edge_index, gnn_seq, batch_index=_batch_index)
+    else:
+        probs, _ = predict_proba_legacy(_model, gnn_seq)
+
+    prediction, confidence, _margin = evaluate_prediction(
+        _labels,
+        probs,
+        min_conf=UMBRAL_CONFIANZA,
+    )
+
+    if prediction is None:
+        return {"prediction": "", "confidence": confidence, "is_idle": True}
+
+    return {"prediction": prediction, "confidence": confidence, "is_idle": False}
+
+
 @app.on_event("startup")
 async def load_model():
-    global _model, _model_type, _edge_index, _labels, _normalize_inputs
+    global _model, _model_type, _edge_index, _batch_index, _labels, _normalize_inputs
 
     _edge_index = create_edge_index()
+    _batch_index = build_batch_index(1)
 
     if not os.path.exists(GNN_LABEL_PATH):
         print(f"⚠  Labels no encontrados: {GNN_LABEL_PATH}")
@@ -86,7 +135,7 @@ async def load_model():
     try:
         gat_model.load_state_dict(state)
         gat_model.eval()
-        _model = gat_model
+        _model = compile_model(gat_model)
         _model_type = "GAT+Transformer"
         print(f"✅ Modelo GAT+Transformer cargado — clases: {_labels}")
     except Exception as exc:
@@ -95,7 +144,7 @@ async def load_model():
         try:
             legacy_model.load_state_dict(state)
             legacy_model.eval()
-            _model = legacy_model
+            _model = compile_model(legacy_model)
             _model_type = "GCN+LSTM"
             print(f"✅ Modelo GCN+LSTM cargado — clases: {_labels}")
         except Exception as legacy_exc:
@@ -104,13 +153,13 @@ async def load_model():
             _model_type = None
             return
 
-    print(f"   Normalización: {_normalize_inputs} | umbral: {UMBRAL_CONFIANZA} | margen top2: {MARGEN_TOP2}")
+    print(
+        f"   SEQ_LEN={_model_seq_len()} | normalización={_normalize_inputs} | "
+        f"umbral={UMBRAL_CONFIANZA} | margen top2={MARGEN_TOP2}"
+    )
 
-
-# ─── Schemas ──────────────────────────────────────────────────────────────────
 
 class PredictRequest(BaseModel):
-    # 30 frames × 126 valores (lh 63 + rh 63)
     frames: list[list[float]]
 
 
@@ -120,8 +169,6 @@ class PredictResponse(BaseModel):
     is_idle: bool
 
 
-# ─── Endpoints ────────────────────────────────────────────────────────────────
-
 @app.get("/health")
 def health():
     return {
@@ -129,7 +176,7 @@ def health():
         "model_loaded": _model is not None,
         "model_type": _model_type or "none",
         "labels": _labels,
-        "seq_len": SEQ_LEN,
+        "seq_len": _model_seq_len() if _model else SEQ_LEN,
         "umbral_confianza": UMBRAL_CONFIANZA,
         "margen_top2": MARGEN_TOP2,
         "normalize_inputs": _normalize_inputs,
@@ -138,43 +185,26 @@ def health():
 
 @app.post("/predict", response_model=PredictResponse)
 async def predict(req: PredictRequest):
-    if _model is None or not _labels or _edge_index is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Modelo no disponible.",
-        )
+    result = _predict_from_frames(req.frames)
+    return PredictResponse(**result)
 
+
+@app.websocket("/ws/predict")
+async def ws_predict(ws: WebSocket):
+    await ws.accept()
     try:
-        data = np.array(req.frames, dtype=np.float32)  # (30, 126)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Frames inválidos: {exc}")
-
-    if data.shape[0] != SEQ_LEN or data.shape[1] != 126:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Shape esperado ({SEQ_LEN}, 126), recibido {data.shape}.",
-        )
-
-    gnn_seq = sequence_compact_to_gnn(data, normalize=_normalize_inputs)
-    if _model_type == "GAT+Transformer":
-        probs, _ = predict_proba(_model, _edge_index, gnn_seq)
-    else:
-        probs, _ = predict_proba_legacy(_model, gnn_seq)
-
-    prediction, confidence, margin = evaluate_prediction(
-        _labels,
-        probs,
-        min_conf=UMBRAL_CONFIANZA,
-    )
-
-    if prediction is None:
-        return PredictResponse(prediction="", confidence=confidence, is_idle=True)
-
-    return PredictResponse(
-        prediction=prediction,
-        confidence=confidence,
-        is_idle=False,
-    )
+        while True:
+            raw = await ws.receive_text()
+            payload = json.loads(raw)
+            frames = payload.get("frames", [])
+            try:
+                result = _predict_from_frames(frames)
+            except HTTPException as exc:
+                await ws.send_json({"error": exc.detail, "status_code": exc.status_code})
+                continue
+            await ws.send_json(result)
+    except WebSocketDisconnect:
+        pass
 
 
 @app.get("/animations")

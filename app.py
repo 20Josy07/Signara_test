@@ -1,5 +1,6 @@
 # app.py
 import io
+import os
 import time
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
@@ -9,23 +10,26 @@ import cv2
 import mediapipe as mp
 
 from continual_learner import ContinualLearner
-from sign_ai.core.gnn_model import get_model, create_edge_index
+from sign_ai.core.gnn_model import SEQ_LEN, get_model, create_edge_index, compile_model
 
 # ---------- CONFIG ----------
-DEVICE = torch.device("cpu")          # Render (free tier) no tiene GPU
-NUM_CLASSES = 120                     # <-- ajusta a tu número de señas
-SEQ_LEN = 30                          # frames por secuencia (igual que en entrenamiento)
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+NUM_CLASSES = 120
 # ----------------------------------------------------
 
 # ---------- CARGA DEL MODELO ----------
 base_model = get_model(
     num_classes=NUM_CLASSES,
     seq_len=SEQ_LEN,
-    ctc=False,               # pon True si deseas entrenar con CTC
+    ctc=False,
 ).to(DEVICE)
+if DEVICE.type == "cuda":
+    base_model = base_model.half()
+base_model = compile_model(base_model)
 edge_index = create_edge_index().to(DEVICE)
 
 # ---------- INICIALIZAMOS EL LEARNER ----------
+ENABLE_CONTINUAL = os.getenv("SIGNARA_CONTINUAL", "0") == "1"
 learner = ContinualLearner(
     base_model=base_model,
     edge_index=edge_index,
@@ -34,14 +38,9 @@ learner = ContinualLearner(
     device=DEVICE,
     conf_thresh=0.60,
     entropy_thresh=1.5,
-    buffer_max_size=2000,
-    replay_ratio=0.15,
-    fine_tune_epochs=3,
-    lr_fine=1e-4,
-    weight_decay=1e-4,
-    check_interval=30,          # segundos entre chequeos del buffer (más rápido para pruebas)
 )
-learner.start()                # arranca el hilo de aprendizaje en background
+if ENABLE_CONTINUAL:
+    learner.start()
 # ----------------------------------------------
 
 # ---------- MEDIAPPipe (solo manos) ----------

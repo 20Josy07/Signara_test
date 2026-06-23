@@ -12,7 +12,7 @@ import {
 } from './PageMotion.jsx'
 import { INTERPRET_TUTORIAL_STEPS } from '../data/modeTutorialSteps.js'
 import { useModeTutorial } from '../hooks/useModeTutorial.js'
-import { ML_API_URL, checkMlApiHealth, getMlApiCache } from '../utils/mlApi.js'
+import { ML_API_URL, checkMlApiHealth, createMlPredictSocket, getMlApiCache } from '../utils/mlApi.js'
 
 const MEDIAPIPE_HOLISTIC_VER = '0.5.1675471629'
 const MEDIAPIPE_CAM_VER      = '0.3.1675466862'
@@ -24,17 +24,16 @@ const MP_SCRIPTS = [
   `https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@${MEDIAPIPE_DRAW_VER}/drawing_utils.js`,
 ]
 
-// ── Parámetros (tuned para navegador, equivalentes a 07_gnn_predict.py) ───────
-const SEQ_LEN        = 30
-const HAND_COUNT     = 21
-const UMBRAL         = 0.80
-const STABILITY_NEED = 4
-const NO_HAND_RESET  = 20
-const SAME_SIGN_WAIT = 35
-const MOVEMENT_MIN   = 0.004
-const MIN_FRAMES     = 14
-const MIN_BUFFER_FILL = 0.65
-const PREDICT_COOLDOWN_MS = 400
+// ── Parámetros (tuned para ~60 fps en navegador) ─────────────────────────────
+const DEFAULT_SEQ_LEN   = 15
+const HAND_COUNT        = 21
+const UMBRAL            = 0.80
+const STABILITY_NEED    = 3
+const NO_HAND_RESET     = 20
+const SAME_SIGN_WAIT    = 25
+const MOVEMENT_MIN      = 0.004
+const MIN_BUFFER_FILL   = 0.65
+const PREDICT_COOLDOWN_MS = 120
 
 // ── Script loader ─────────────────────────────────────────────────────────────
 
@@ -107,10 +106,14 @@ function movBetween(prev, curr) {
 
 // Pad del buffer al inicio repitiendo el primer frame hasta llegar a SEQ_LEN.
 // Igual que: while len(seq) < SEQ_LEN: seq.insert(0, seq[0]) en Python.
-function padBuffer(buffer) {
+function padBuffer(buffer, seqLen) {
   const padded = [...buffer]
-  while (padded.length < SEQ_LEN) padded.unshift(padded[0])
-  return padded.slice(-SEQ_LEN)
+  while (padded.length < seqLen) padded.unshift(padded[0])
+  return padded.slice(-seqLen)
+}
+
+function minFramesFor(seqLen) {
+  return Math.max(7, Math.ceil(seqLen * 0.55))
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
@@ -124,7 +127,10 @@ export default function InterpretScreen({ onBack, onHome }) {
   const audioRef     = useRef(true)
 
   // Pipeline refs (sin re-render)
-  const landmarkBufferRef = useRef([])   // frames con movimiento, maxlen=SEQ_LEN
+  const seqLenRef         = useRef(DEFAULT_SEQ_LEN)
+  const mlSocketRef       = useRef(null)
+  const predictHandlerRef = useRef(null)
+  const landmarkBufferRef = useRef([])
   const predHistRef       = useRef([])   // historial de predicciones para estabilidad
   const prevFrameRef      = useRef(null) // frame anterior para calcular movimiento
   const noHandCountRef    = useRef(0)    // frames consecutivos sin manos
@@ -154,6 +160,9 @@ export default function InterpretScreen({ onBack, onHome }) {
   const [latest,        setLatest]        = useState(null)
   const [history,       setHistory]       = useState([])
   const [sentence,      setSentence]      = useState([])
+  const [seqLen,        setSeqLen]        = useState(DEFAULT_SEQ_LEN)
+
+  const minFrames = minFramesFor(seqLen)
 
   useEffect(() => { runningRef.current = running }, [running])
   useEffect(() => { audioRef.current   = audioOn  }, [audioOn])
@@ -167,6 +176,10 @@ export default function InterpretScreen({ onBack, onHome }) {
       mlAvailableRef.current = cached.ok
       setMlMode(cached.ok)
       setMlConnecting(false)
+      if (cached.seqLen) {
+        seqLenRef.current = cached.seqLen
+        setSeqLen(cached.seqLen)
+      }
     } else {
       setMlConnecting(true)
     }
@@ -176,10 +189,42 @@ export default function InterpretScreen({ onBack, onHome }) {
       mlAvailableRef.current = result.ok
       setMlMode(result.ok)
       setMlConnecting(false)
+      if (result.seqLen) {
+        seqLenRef.current = result.seqLen
+        setSeqLen(result.seqLen)
+      }
     })
 
     return () => { cancelled = true }
   }, [])
+
+  // ── WebSocket ML (menor latencia que HTTP por frame) ─────────────────────
+  useEffect(() => {
+    if (!mlMode) {
+      mlSocketRef.current?.close()
+      mlSocketRef.current = null
+      return undefined
+    }
+
+    const socket = createMlPredictSocket({
+      onMessage: (data) => {
+        const handler = predictHandlerRef.current
+        predictHandlerRef.current = null
+        apiInFlightRef.current = false
+        if (handler) handler(data)
+      },
+      onError: () => {
+        predictHandlerRef.current = null
+        apiInFlightRef.current = false
+      },
+      onClose: () => {
+        mlSocketRef.current = null
+      },
+    })
+    mlSocketRef.current = socket
+
+    return () => socket.close()
+  }, [mlMode])
 
   // ── Cargar MediaPipe ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -207,12 +252,12 @@ export default function InterpretScreen({ onBack, onHome }) {
         `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@${MEDIAPIPE_HOLISTIC_VER}/${f}`
     })
     holistic.setOptions({
-      modelComplexity:        1,
+      modelComplexity:        0,
       smoothLandmarks:        true,
       enableSegmentation:     false,
       refineFaceLandmarks:    false,
-      minDetectionConfidence: 0.6,
-      minTrackingConfidence:  0.6,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence:  0.5,
     })
     holistic.onResults(handleResults)
     holisticRef.current = holistic
@@ -223,7 +268,7 @@ export default function InterpretScreen({ onBack, onHome }) {
           try { await holisticRef.current.send({ image: videoEl }) } catch (_) {}
         }
       },
-      width: 640, height: 480,
+      width: 320, height: 240,
     })
     cameraRef.current = camera
 
@@ -364,27 +409,65 @@ export default function InterpretScreen({ onBack, onHome }) {
     // Solo acumular frames con movimiento real (≥ MOVEMENT_MIN)
     if (mov >= MOVEMENT_MIN) {
       landmarkBufferRef.current.push(currFrame)
-      if (landmarkBufferRef.current.length > SEQ_LEN) {
+      const maxLen = seqLenRef.current
+      if (landmarkBufferRef.current.length > maxLen) {
         landmarkBufferRef.current.shift()
       }
     }
 
     const n = landmarkBufferRef.current.length
+    const activeSeqLen = seqLenRef.current
+    const activeMinFrames = minFramesFor(activeSeqLen)
     setBufferLen(n)
 
     // ── Predecir cuando hay suficientes frames ───────────────────────────────
     if (
       runningRef.current        &&
       mlAvailableRef.current    &&
-      n >= MIN_FRAMES           &&
-      n >= Math.ceil(SEQ_LEN * MIN_BUFFER_FILL) &&
+      n >= activeMinFrames      &&
+      n >= Math.ceil(activeSeqLen * MIN_BUFFER_FILL) &&
       cooldownRef.current === 0 &&
       !apiInFlightRef.current   &&
       Date.now() - lastPredictAtRef.current >= PREDICT_COOLDOWN_MS
     ) {
-      const bufferCopy = padBuffer([...landmarkBufferRef.current])
+      const bufferCopy = padBuffer([...landmarkBufferRef.current], activeSeqLen)
       apiInFlightRef.current = true
       lastPredictAtRef.current = Date.now()
+
+      const applyPrediction = ({ prediction, confidence, is_idle, error }) => {
+        if (error) return
+        if (!is_idle && prediction && confidence >= UMBRAL) {
+          predHistRef.current.push(prediction)
+          if (predHistRef.current.length > STABILITY_NEED) {
+            predHistRef.current.shift()
+          }
+
+          if (
+            predHistRef.current.length >= STABILITY_NEED &&
+            new Set(predHistRef.current).size === 1 &&
+            prediction !== lastSignRef.current
+          ) {
+            lastSignRef.current       = prediction
+            cooldownRef.current       = SAME_SIGN_WAIT
+            landmarkBufferRef.current = []
+            predHistRef.current       = []
+
+            setDisplaySign(prediction)
+            setDisplayConf(confidence)
+            setBufferLen(0)
+            setInCooldown(true)
+            triggerRecognition(prediction, confidence)
+          }
+        } else {
+          predHistRef.current = []
+        }
+      }
+
+      const socket = mlSocketRef.current
+      if (socket?.ready && socket.send(bufferCopy)) {
+        predictHandlerRef.current = applyPrediction
+        return
+      }
 
       ;(async () => {
         try {
@@ -394,37 +477,7 @@ export default function InterpretScreen({ onBack, onHome }) {
             body:    JSON.stringify({ frames: bufferCopy }),
           })
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-
-          const { prediction, confidence, is_idle } = await resp.json()
-
-          if (!is_idle && prediction && confidence >= UMBRAL) {
-            predHistRef.current.push(prediction)
-            if (predHistRef.current.length > STABILITY_NEED) {
-              predHistRef.current.shift()
-            }
-
-            // Confirmar: STABILITY_NEED iguales y seña nueva
-            if (
-              predHistRef.current.length >= STABILITY_NEED &&
-              new Set(predHistRef.current).size === 1 &&
-              prediction !== lastSignRef.current
-            ) {
-              lastSignRef.current       = prediction
-              cooldownRef.current       = SAME_SIGN_WAIT
-              landmarkBufferRef.current = []
-              predHistRef.current       = []
-
-              setDisplaySign(prediction)
-              setDisplayConf(confidence)
-              setBufferLen(0)
-              setInCooldown(true)
-
-              triggerRecognition(prediction, confidence)
-            }
-          } else {
-            // Sin seña o baja confianza → resetear estabilidad
-            predHistRef.current = []
-          }
+          applyPrediction(await resp.json())
         } catch {
           mlAvailableRef.current = false
           setMlMode(false)
@@ -496,13 +549,13 @@ export default function InterpretScreen({ onBack, onHome }) {
     if (!mlMode)                   return '⚠ Servidor IA no conectado'
     if (!handVisible)              return 'Muestra una mano'
     if (displaySign && inCooldown) return `${displaySign.replace(/_/g, ' ')} · ${Math.round(displayConf * 100)}%`
-    if (bufferLen > 0 && bufferLen < Math.ceil(SEQ_LEN * MIN_BUFFER_FILL)) return 'Completa la seña…'
-    if (bufferLen >= MIN_FRAMES)   return 'Detectando…'
-    if (bufferLen > 0)             return `Moviendo... ${bufferLen}/${MIN_FRAMES}`
+    if (bufferLen > 0 && bufferLen < Math.ceil(seqLen * MIN_BUFFER_FILL)) return 'Completa la seña…'
+    if (bufferLen >= minFrames)   return 'Detectando…'
+    if (bufferLen > 0)             return `Moviendo... ${bufferLen}/${minFrames}`
     return 'Haz la seña'
   })()
 
-  const bufferProgress = Math.min(100, (bufferLen / MIN_FRAMES) * 100)
+  const bufferProgress = Math.min(100, (bufferLen / minFrames) * 100)
   const confPct = latest ? Math.round((latest.confidence || 0) * 100) : 0
 
   const tutorial = useModeTutorial('interpret')
@@ -597,11 +650,11 @@ export default function InterpretScreen({ onBack, onHome }) {
                                 className="h-full rounded-full transition-all duration-100"
                                 style={{
                                   width: `${bufferProgress}%`,
-                                  background: bufferLen >= MIN_FRAMES ? '#94D08E' : '#E9CF7E',
+                                  background: bufferLen >= minFrames ? '#94D08E' : '#E9CF7E',
                                 }}
                               />
                             </div>
-                            <span className="text-xs font-bold tabular-nums text-pastel-ink">{bufferLen}/{MIN_FRAMES}</span>
+                            <span className="text-xs font-bold tabular-nums text-pastel-ink">{bufferLen}/{minFrames}</span>
                           </div>
                         </div>
                       )}
