@@ -24,10 +24,6 @@ __pycache__/
 datasets/
 *.pkl
 *.csv
-# Ignorar modelo legacy y datos de entrenamiento, NO el modelo GNN
-src/sign-translate/models/signara_lstm.keras
-src/sign-translate/models/labels.json
-src/sign-translate/data/
 
 # =========================
 # SISTEMA / OS

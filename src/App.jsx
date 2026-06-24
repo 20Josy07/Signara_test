@@ -5,7 +5,7 @@ import TranslationScreen from './components/TranslationScreen.jsx'
 import InterpretScreen from './components/InterpretScreen.jsx'
 import ScreenTransition from './components/ScreenTransition.jsx'
 import { setCurrentAvatar } from './utils/signMap.js'
-import { warmupMlApi } from './utils/mlApi.js'
+import { warmupSignMtApi } from './utils/signMtApi.js'
 
 /**
  * App
@@ -74,7 +74,7 @@ export default function App() {
 
   useEffect(() => {
     if (screen === 'landing' || screen === 'mode') {
-      warmupMlApi()
+      warmupSignMtApi()
     }
   }, [screen])
 

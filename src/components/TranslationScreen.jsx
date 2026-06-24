@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ResetButton, SectionLabel } from './AppShell.jsx'
 import AvatarPlayer from './AvatarPlayer.jsx'
+import SignWritingViewer from './SignWritingViewer.jsx'
+import PoseViewer from './PoseViewer.jsx'
 import TextInputPanel from './TextInputPanel.jsx'
 import SignChips from './SignChips.jsx'
 import ModeTutorial, { TutorialHelpButton } from './ModeTutorial.jsx'
@@ -33,6 +35,9 @@ export default function TranslationScreen({
 }) {
   const [originalText, setOriginalText] = useState('')
   const [signs, setSigns] = useState([])
+  const [signWriting, setSignWriting] = useState([])
+  const [poseUrl, setPoseUrl] = useState(null)
+  const [translateSource, setTranslateSource] = useState(null)
   const [activeSign, setActiveSign] = useState(null)
   const [busy, setBusy] = useState(false)
   const [liveMode, setLiveMode] = useState(false)
@@ -69,6 +74,9 @@ export default function TranslationScreen({
   const resetState = useCallback(() => {
     setOriginalText('')
     setSigns([])
+    setSignWriting([])
+    setPoseUrl(null)
+    setTranslateSource(null)
     setActiveSign(null)
     setBusy(false)
     setLiveMode(false)
@@ -98,11 +106,22 @@ export default function TranslationScreen({
   const handleSubmit = useCallback(async (text) => {
     setBusy(true)
     setOriginalText(text)
+    setSignWriting([])
+    setPoseUrl(null)
     try {
       const result = await translateText(text)
-      setSigns(result)
-      if (avatarRef.current) {
-        avatarRef.current.replace(result)
+      setTranslateSource(result.source)
+      setOriginalText(result.text || text)
+
+      if (result.tokens?.length) {
+        setSignWriting(result.tokens)
+        setPoseUrl(result.poseUrl)
+        setSigns(result.tokens)
+      } else if (result.fallback?.length) {
+        setSigns(result.fallback)
+        if (avatarRef.current) avatarRef.current.replace(result.fallback)
+      } else {
+        setSigns([])
       }
     } catch (e) {
       console.error(e)
@@ -178,7 +197,11 @@ export default function TranslationScreen({
     }
   }
 
-  const displaySigns = signs.map((s) => s.replace('.mp4', '').replace(/_/g, ' ').toUpperCase())
+  const displaySigns = signWriting.length
+    ? signWriting.map((_, i) => `Seña ${i + 1}`)
+    : signs.map((s) => s.replace('.mp4', '').replace(/_/g, ' ').toUpperCase())
+
+  const usingSignMt = translateSource === 'signmt' && signWriting.length > 0
 
   const tutorial = useModeTutorial('translate')
 
@@ -227,9 +250,14 @@ export default function TranslationScreen({
                   </StatusPill>
                 )}
                 {busy && <StatusPill variant="busy">Procesando…</StatusPill>}
-                {signs.length > 0 && (
+                {signs.length > 0 && !usingSignMt && (
                   <StatusPill variant="count">
                     {signs.length} {signs.length === 1 ? 'seña' : 'señas'}
+                  </StatusPill>
+                )}
+                {signWriting.length > 0 && (
+                  <StatusPill variant="count">
+                    {signWriting.length} SignWriting
                   </StatusPill>
                 )}
                 <StatusPill variant="avatar">🧑 {avatar.name}</StatusPill>
@@ -267,7 +295,7 @@ export default function TranslationScreen({
                   title="Secuencia de señas"
                   emptyIcon="🤟"
                   empty="Las señas saldrán aquí en orden."
-                  hasContent={signs.length > 0}
+                  hasContent={signs.length > 0 || signWriting.length > 0}
                 >
                   <SignChips signs={displaySigns} activeIndex={activeIndex} />
                 </OutputCard>
@@ -294,6 +322,8 @@ export default function TranslationScreen({
                       <p className="mt-1 text-xl font-extrabold text-pastel-ink sm:text-2xl">
                         {activeSign ? (
                           formatSign(activeSign)
+                        ) : signWriting.length > 0 ? (
+                          'Señas SignWriting'
                         ) : signs.length > 0 ? (
                           'Interpretando…'
                         ) : (
@@ -303,19 +333,25 @@ export default function TranslationScreen({
                     </div>
                   </div>
 
-                  <div className="relative flex flex-1 items-center justify-center rounded-[1.5rem] border-2 border-white/60 bg-[#FAF6EC]/90 p-4 shadow-inner sm:p-6">
-                    <div className="w-full max-w-sm">
-                      <AvatarPlayer
-                        ref={avatarRef}
-                        avatarId={avatarId}
-                        onAvatarChange={handleAvatarChange}
-                        onSign={setActiveSign}
-                        onFinish={() => setActiveSign(null)}
-                      />
+                  <div className="relative flex flex-1 items-center justify-center rounded-[1.5rem] border-2 border-white/60 bg-[#FAF6EC]/90 p-4 shadow-inner sm:p-6 min-h-[320px]">
+                    <div className="w-full max-w-lg">
+                      {usingSignMt && poseUrl ? (
+                        <PoseViewer src={poseUrl} />
+                      ) : usingSignMt ? (
+                        <SignWritingViewer tokens={signWriting} />
+                      ) : (
+                        <AvatarPlayer
+                          ref={avatarRef}
+                          avatarId={avatarId}
+                          onAvatarChange={handleAvatarChange}
+                          onSign={setActiveSign}
+                          onFinish={() => setActiveSign(null)}
+                        />
+                      )}
                     </div>
                   </div>
 
-                  {!signs.length && !originalText && (
+                  {!signs.length && !signWriting.length && !originalText && (
                     <div className="relative mt-4 rounded-2xl border-2 border-dashed border-pastel-ink/15 bg-white/50 px-4 py-3 text-center">
                       <p className="text-sm font-bold text-pastel-ink">
                         ↑ Escribe arriba o elige un ejemplo para empezar

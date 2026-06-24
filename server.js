@@ -64,8 +64,37 @@ app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     service: 'signara-web',
-    note: 'La API de interpretar (ML) usa /health en el servicio de Render (src/sign-translate).',
+    note: 'Traducción e interpretación usan el backend sign.mt (proyecto translate).',
   });
+});
+
+const SIGN_MT_API = (process.env.SIGN_MT_API_URL || 'https://sign.mt/api').replace(/\/$/, '');
+
+app.use('/sign-mt', async (req, res) => {
+  try {
+    const target = `${SIGN_MT_API}${req.url}`;
+    const headers = { Accept: 'application/json' };
+    if (req.headers['content-type']) {
+      headers['Content-Type'] = req.headers['content-type'];
+    }
+
+    const init = { method: req.method, headers };
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
+      init.body = JSON.stringify(req.body);
+    }
+
+    const upstream = await fetch(target, init);
+    const body = await upstream.text();
+    res.status(upstream.status);
+    upstream.headers.forEach((v, k) => {
+      if (k.toLowerCase() === 'transfer-encoding') return;
+      res.setHeader(k, v);
+    });
+    res.send(body);
+  } catch (err) {
+    console.error('[sign-mt proxy]', err.message);
+    res.status(502).json({ error: 'Backend sign.mt no disponible' });
+  }
 });
 
 const distDir = resolve(__dirname, 'dist');

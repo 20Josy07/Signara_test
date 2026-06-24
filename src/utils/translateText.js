@@ -1,50 +1,84 @@
 import { textToSignTokens } from './textNormalizer.js'
 import { getAllSignKeys } from './signMap.js'
+import {
+  spokenToSignWriting,
+  spokenToSignedPoseUrl,
+  normalizeSpokenText,
+} from './signMtApi.js'
 
 /**
- * translateText
- * Converts free-form Spanish text into an ordered array of sign tokens.
+ * Traduce texto español → señas usando el backend sign.mt (proyecto translate).
  *
- * Strategy:
- *  1. Try the backend /api/translate (may enrich with NLP/grammar ordering).
- *  2. If the API is unavailable or returns nothing, fall back to local
- *     normalization + fuzzy matching (works fully offline).
- *
- * @param {string} text
- * @returns {Promise<string[]>} e.g. ["HOLA", "POR_FAVOR"]
+ * @returns {Promise<{
+ *   tokens: string[],
+ *   poseUrl: string | null,
+ *   text: string,
+ *   fallback: string[],
+ *   source: 'signmt' | 'claude' | 'local'
+ * }>}
  */
 export async function translateText(text) {
   const signKeys = getAllSignKeys()
+  const trimmed = text.trim()
+  if (!trimmed) {
+    return { tokens: [], poseUrl: null, text: '', fallback: [], source: 'local' }
+  }
+
+  let normalizedText = trimmed
+  try {
+    normalizedText = await normalizeSpokenText(trimmed, 'es')
+  } catch {
+    normalizedText = trimmed
+  }
+
+  try {
+    const signWritingRaw = await spokenToSignWriting(normalizedText)
+    const tokens = signWritingRaw.split(/\s+/).filter(Boolean)
+    if (tokens.length > 0) {
+      return {
+        tokens,
+        poseUrl: spokenToSignedPoseUrl(normalizedText, 'es', 'ssp'),
+        text: normalizedText,
+        fallback: textToSignTokens(trimmed, signKeys),
+        source: 'signmt',
+      }
+    }
+  } catch {
+    // sign.mt no disponible
+  }
 
   try {
     const response = await fetch('/api/translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text: trimmed }),
     })
-
-    if (!response.ok) throw new Error('API error')
-
-    const data = await response.json()
-    if (data.signs && data.signs.length > 0) {
-      // Normalize: strip ".mp4" suffix if present (legacy API format), uppercase
-      const normalized = data.signs
-        .map(s => String(s).replace(/\.mp4$/i, '').toUpperCase().replace(/\s+/g, '_').trim())
-        .filter(s => signKeys.includes(s))
-      if (normalized.length > 0) {
-        // Ensure API response follows text order (guard against LLM reordering)
-        const textNorm = text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-        return [...normalized].sort((a, b) => {
-          const ai = textNorm.indexOf(a.toLowerCase().replace(/_/g, ' '))
-          const bi = textNorm.indexOf(b.toLowerCase().replace(/_/g, ' '))
-          return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi)
-        })
+    if (response.ok) {
+      const data = await response.json()
+      if (data.signs?.length > 0) {
+        const normalized = data.signs
+          .map((s) => String(s).replace(/\.mp4$/i, '').toUpperCase().replace(/\s+/g, '_').trim())
+          .filter((s) => signKeys.includes(s))
+        if (normalized.length > 0) {
+          return {
+            tokens: [],
+            poseUrl: null,
+            text: trimmed,
+            fallback: normalized,
+            source: 'claude',
+          }
+        }
       }
     }
-    // API returned empty or unrecognized tokens — fall through to local
   } catch {
-    // API unavailable — silent fallback
+    // Claude no disponible
   }
 
-  return textToSignTokens(text, signKeys)
+  return {
+    tokens: [],
+    poseUrl: null,
+    text: trimmed,
+    fallback: textToSignTokens(trimmed, signKeys),
+    source: 'local',
+  }
 }

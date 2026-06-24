@@ -11,9 +11,14 @@ import {
   AppPageStagger,
 } from './PageMotion.jsx'
 import { INTERPRET_TUTORIAL_STEPS } from '../data/modeTutorialSteps.js'
-import { COMPACT_DIM, COMPACT_HAND_DIM, FACE_IDX } from '../data/faceIdx.js'
 import { useModeTutorial } from '../hooks/useModeTutorial.js'
-import { ML_API_URL, checkMlApiHealth, createMlPredictSocket, getMlApiCache } from '../utils/mlApi.js'
+import { checkSignMtHealth, getSignMtCache } from '../utils/signMtApi.js'
+import {
+  initSignEngine,
+  holisticToFswTokens,
+  fswTokensToText,
+  detectSigning,
+} from '../sign-engine/index.js'
 
 const MEDIAPIPE_HOLISTIC_VER = '0.5.1675471629'
 const MEDIAPIPE_CAM_VER      = '0.3.1675466862'
@@ -25,17 +30,12 @@ const MP_SCRIPTS = [
   `https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@${MEDIAPIPE_DRAW_VER}/drawing_utils.js`,
 ]
 
-// ── Parámetros de reconocimiento en tiempo real ───────────────────────────────
-const DEFAULT_SEQ_LEN      = 15
-const HAND_COUNT           = 21
-const UMBRAL               = 0.80
-const UMBRAL_HIGH          = 0.88   // confianza alta → menos repeticiones necesarias
-const STABILITY_NEED       = 2      // ventanas consecutivas iguales (normal)
-const STABILITY_NEED_FAST  = 1      // con confianza ≥ UMBRAL_HIGH
+// ── Parámetros de interpretación en tiempo real ───────────────────────────────
+const UMBRAL               = 0.50   // umbral detector de firma (sign-detector)
 const NO_HAND_RESET        = 20
 const SAME_SIGN_WAIT       = 20
-const MIN_FRAMES_TO_PREDICT = 4     // mínimo de frames reales antes de la 1ª inferencia
-const PREDICT_COOLDOWN_MS  = 80     // ventana deslizante: inferir ~12×/s
+const MIN_FRAMES_TO_PREDICT = 4
+const PREDICT_COOLDOWN_MS  = 80
 
 // ── Script loader ─────────────────────────────────────────────────────────────
 
@@ -61,64 +61,6 @@ async function loadMediaPipe() {
   for (const url of MP_SCRIPTS) await loadScript(url)
 }
 
-// ── Extracción de landmarks ───────────────────────────────────────────────────
-//
-// CORRECCIÓN DE ESPEJO:
-// Python hace cv2.flip(frame,1) ANTES de MediaPipe → landmarks tienen x espejado.
-// El navegador pasa el frame crudo (sin flip) a MediaPipe.
-// Fix: x = 1 - x  +  swap left↔right (en frame crudo, la mano derecha anatómica
-// aparece a la izquierda → leftHandLandmarks; en frame flipado aparece a la derecha
-// → right_hand_landmarks).
-//
-// Resultado: slot lh (primeros 63) = mano izquierda anatómica de la persona
-//            slot rh (últimos 63)  = mano derecha anatómica de la persona
-// Igual que en el entrenamiento.
-
-function extractLandmarks(results) {
-  const handCoords = (landmarks) => {
-    const arr = new Array(HAND_COUNT * 3).fill(0)
-    if (landmarks && landmarks.length > 0) {
-      const n = Math.min(landmarks.length, HAND_COUNT)
-      for (let i = 0; i < n; i++) {
-        arr[i * 3]     = 1.0 - (landmarks[i]?.x ?? 0)
-        arr[i * 3 + 1] = landmarks[i]?.y ?? 0
-        arr[i * 3 + 2] = landmarks[i]?.z ?? 0
-      }
-    }
-    return arr
-  }
-
-  const faceCoords = () => {
-    const arr = new Array(FACE_IDX.length * 3).fill(0)
-    const face = results.faceLandmarks
-    if (face && face.length > 0) {
-      for (let i = 0; i < FACE_IDX.length; i++) {
-        const p = face[FACE_IDX[i]]
-        if (!p) continue
-        arr[i * 3]     = 1.0 - (p.x ?? 0)
-        arr[i * 3 + 1] = p.y ?? 0
-        arr[i * 3 + 2] = p.z ?? 0
-      }
-    }
-    return arr
-  }
-
-  return [
-    ...handCoords(results.rightHandLandmarks),
-    ...handCoords(results.leftHandLandmarks),
-    ...faceCoords(),
-  ]
-}
-
-// Pad del buffer al inicio repitiendo el primer frame hasta llegar a SEQ_LEN.
-// Igual que: while len(seq) < SEQ_LEN: seq.insert(0, seq[0]) en Python.
-function padBuffer(buffer, seqLen) {
-  if (buffer.length === 0) return []
-  const padded = [...buffer]
-  while (padded.length < seqLen) padded.unshift(padded[0])
-  return padded.slice(-seqLen)
-}
-
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function InterpretScreen({ onBack, onHome }) {
@@ -129,19 +71,15 @@ export default function InterpretScreen({ onBack, onHome }) {
   const runningRef   = useRef(false)
   const audioRef     = useRef(true)
 
-  // Pipeline refs (sin re-render)
-  const seqLenRef         = useRef(DEFAULT_SEQ_LEN)
-  const compactDimRef     = useRef(COMPACT_DIM)
-  const mlSocketRef       = useRef(null)
-  const predictHandlerRef = useRef(null)
   const landmarkBufferRef = useRef([])
-  const predHistRef       = useRef([])
   const noHandCountRef    = useRef(0)
-  const cooldownRef       = useRef(0)    // cooldown frame-based
-  const lastSignRef       = useRef('')   // última seña confirmada (evita repetir)
+  const cooldownRef       = useRef(0)
   const apiInFlightRef    = useRef(false)
   const lastPredictAtRef  = useRef(0)
   const mlAvailableRef    = useRef(false)
+  const handsModelReadyRef = useRef(false)
+  const signingRef = useRef(false)
+  const fswBufferRef = useRef([])
   const sentenceClearRef  = useRef(null)
 
   // UI state
@@ -164,78 +102,36 @@ export default function InterpretScreen({ onBack, onHome }) {
   const [latest,        setLatest]        = useState(null)
   const [history,       setHistory]       = useState([])
   const [sentence,      setSentence]      = useState([])
-  const [seqLen,        setSeqLen]        = useState(DEFAULT_SEQ_LEN)
-  const [compactDim,    setCompactDim]    = useState(COMPACT_DIM)
 
   useEffect(() => { runningRef.current = running }, [running])
   useEffect(() => { audioRef.current   = audioOn  }, [audioOn])
 
-  // ── Verificar API ML ───────────────────────────────────────────────────────
+  // ── Verificar backend sign.mt + cargar modelos de mano ─────────────────────
   useEffect(() => {
     let cancelled = false
-    const cached = getMlApiCache()
+    const cached = getSignMtCache()
 
     if (cached) {
       mlAvailableRef.current = cached.ok
       setMlMode(cached.ok)
       setMlConnecting(false)
-      if (cached.seqLen) {
-        seqLenRef.current = cached.seqLen
-        setSeqLen(cached.seqLen)
-      }
-      if (cached.compactDim) {
-        compactDimRef.current = cached.compactDim
-        setCompactDim(cached.compactDim)
-      }
     } else {
       setMlConnecting(true)
     }
 
-    checkMlApiHealth().then((result) => {
+    checkSignMtHealth().then((result) => {
       if (cancelled) return
       mlAvailableRef.current = result.ok
       setMlMode(result.ok)
       setMlConnecting(false)
-      if (result.seqLen) {
-        seqLenRef.current = result.seqLen
-        setSeqLen(result.seqLen)
-      }
-      if (result.compactDim) {
-        compactDimRef.current = result.compactDim
-        setCompactDim(result.compactDim)
-      }
     })
+
+    initSignEngine()
+      .then(() => { handsModelReadyRef.current = true })
+      .catch(() => { handsModelReadyRef.current = false })
 
     return () => { cancelled = true }
   }, [])
-
-  // ── WebSocket ML (menor latencia que HTTP por frame) ─────────────────────
-  useEffect(() => {
-    if (!mlMode) {
-      mlSocketRef.current?.close()
-      mlSocketRef.current = null
-      return undefined
-    }
-
-    const socket = createMlPredictSocket({
-      onMessage: (data) => {
-        const handler = predictHandlerRef.current
-        predictHandlerRef.current = null
-        apiInFlightRef.current = false
-        if (handler) handler(data)
-      },
-      onError: () => {
-        predictHandlerRef.current = null
-        apiInFlightRef.current = false
-      },
-      onClose: () => {
-        mlSocketRef.current = null
-      },
-    })
-    mlSocketRef.current = socket
-
-    return () => socket.close()
-  }, [mlMode])
 
   // ── Cargar MediaPipe ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -360,7 +256,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     const hasRight = !!results.rightHandLandmarks
     const hasHands = hasLeft || hasRight
 
-    // ── Solo dibuja manos (igual que 07_gnn_predict.py) ─────────────────────
+    // ── Dibuja manos en el canvas ───────────────────────────────────────────
     if (window.drawConnectors && window.drawLandmarks) {
       if (hasLeft) {
         window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS,
@@ -392,8 +288,7 @@ export default function InterpretScreen({ onBack, onHome }) {
       if (noHandCountRef.current >= NO_HAND_RESET) {
         // Reset completo igual que Python
         landmarkBufferRef.current = []
-        predHistRef.current       = []
-        lastSignRef.current       = ''
+        fswBufferRef.current = []
         cooldownRef.current       = 0
         setDisplaySign('')
         setDisplayConf(0)
@@ -407,106 +302,71 @@ export default function InterpretScreen({ onBack, onHome }) {
     // ── Con manos ────────────────────────────────────────────────────────────
     noHandCountRef.current = 0
 
-    const currFrame = extractLandmarks(results)
+    const w = canvas.width
+    const h = canvas.height
+    const signingProb = handsModelReadyRef.current ? detectSigning(results) : 0
+    setLiveConf(signingProb)
 
-    // Acumular cada frame con manos visibles (ventana deslizante)
-    landmarkBufferRef.current.push(currFrame)
-    const maxLen = seqLenRef.current * 2
-    if (landmarkBufferRef.current.length > maxLen) {
-      landmarkBufferRef.current.shift()
+    const wasSigning = signingRef.current
+    signingRef.current = signingProb > 0.5
+
+    if (signingRef.current && handsModelReadyRef.current) {
+      landmarkBufferRef.current.push(1)
+      if (Date.now() - lastPredictAtRef.current >= PREDICT_COOLDOWN_MS && !apiInFlightRef.current) {
+        lastPredictAtRef.current = Date.now()
+        apiInFlightRef.current = true
+        holisticToFswTokens(results, w, h)
+          .then((tokens) => {
+            if (tokens?.length) fswBufferRef.current = tokens
+          })
+          .finally(() => { apiInFlightRef.current = false })
+      }
     }
 
     const n = landmarkBufferRef.current.length
-    const activeSeqLen = seqLenRef.current
     setBufferLen(n)
 
-    // ── Inferencia con ventana deslizante (no esperar a llenar SEQ_LEN) ─────
+    // Al terminar de firmar → traducir SignWriting acumulado
     if (
-      runningRef.current        &&
-      mlAvailableRef.current    &&
-      n >= MIN_FRAMES_TO_PREDICT &&
+      wasSigning &&
+      !signingRef.current &&
+      fswBufferRef.current.length > 0 &&
+      mlAvailableRef.current &&
       cooldownRef.current === 0 &&
-      !apiInFlightRef.current   &&
-      Date.now() - lastPredictAtRef.current >= PREDICT_COOLDOWN_MS
+      !apiInFlightRef.current
     ) {
-      const bufferCopy = padBuffer([...landmarkBufferRef.current], activeSeqLen)
-      const payload = compactDimRef.current === COMPACT_HAND_DIM
-        ? bufferCopy.map((f) => f.slice(0, COMPACT_HAND_DIM))
-        : bufferCopy
       apiInFlightRef.current = true
-      lastPredictAtRef.current = Date.now()
+      const tokens = [...fswBufferRef.current]
+      fswBufferRef.current = []
+      landmarkBufferRef.current = []
 
-      const applyPrediction = ({ prediction, confidence, is_idle, error }) => {
-        if (error) return
-
-        setLiveConf(confidence)
-
-        if (is_idle || !prediction) {
-          if (confidence < 0.45) predHistRef.current = []
-          return
-        }
-
-        if (confidence >= UMBRAL) {
-          predHistRef.current.push(prediction)
-          const need = confidence >= UMBRAL_HIGH ? STABILITY_NEED_FAST : STABILITY_NEED
-          if (predHistRef.current.length > need) {
-            predHistRef.current.shift()
-          }
-
-          if (
-            predHistRef.current.length >= need &&
-            new Set(predHistRef.current).size === 1 &&
-            prediction !== lastSignRef.current
-          ) {
-            lastSignRef.current       = prediction
-            cooldownRef.current       = SAME_SIGN_WAIT
-            landmarkBufferRef.current = []
-            predHistRef.current       = []
-
-            setDisplaySign(prediction)
-            setDisplayConf(confidence)
-            setBufferLen(0)
-            setLiveConf(confidence)
-            setInCooldown(true)
-            triggerRecognition(prediction, confidence)
-          }
-        } else if (confidence < 0.45) {
-          predHistRef.current = []
-        }
-      }
-
-      const socket = mlSocketRef.current
-      if (socket?.ready && socket.send(payload)) {
-        predictHandlerRef.current = applyPrediction
-        return
-      }
-
-      ;(async () => {
-        try {
-          const resp = await fetch(`${ML_API_URL}/predict`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ frames: payload }),
-          })
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-          applyPrediction(await resp.json())
-        } catch {
+      fswTokensToText(tokens)
+        .then((text) => {
+          if (!text?.trim()) return
+          const prediction = text.trim()
+          const confidence = signingProb
+          triggerRecognition(prediction.replace(/\s+/g, '_'), confidence)
+          setDisplaySign(prediction.replace(/\s+/g, '_'))
+          setDisplayConf(confidence)
+          cooldownRef.current = SAME_SIGN_WAIT
+          setInCooldown(true)
+        })
+        .catch(() => {
           mlAvailableRef.current = false
           setMlMode(false)
-        } finally {
-          apiInFlightRef.current = false
-        }
-      })()
+        })
+        .finally(() => { apiInFlightRef.current = false })
     }
   }
 
   // ── Controles ─────────────────────────────────────────────────────────────
   function startDetect() {
     landmarkBufferRef.current = []
-    predHistRef.current       = []
+    fswBufferRef.current      = []
+    fswBufferRef.current      = []
+    signingRef.current        = false
     noHandCountRef.current    = 0
     cooldownRef.current       = 0
-    lastSignRef.current       = ''
     apiInFlightRef.current    = false
     lastPredictAtRef.current  = 0
     setBufferLen(0)
@@ -524,10 +384,10 @@ export default function InterpretScreen({ onBack, onHome }) {
 
   const handleReset = useCallback(() => {
     landmarkBufferRef.current = []
-    predHistRef.current       = []
-    noHandCountRef.current    = 0
+    fswBufferRef.current      = []
+    fswBufferRef.current      = []
+    signingRef.current        = false
     cooldownRef.current       = 0
-    lastSignRef.current       = ''
     apiInFlightRef.current    = false
     lastPredictAtRef.current  = 0
     setLatest(null)
@@ -544,7 +404,7 @@ export default function InterpretScreen({ onBack, onHome }) {
 
   function retryMlConnection() {
     setMlConnecting(true)
-    checkMlApiHealth({ force: true })
+    checkSignMtHealth({ force: true })
       .then((result) => {
         mlAvailableRef.current = result.ok
         setMlMode(result.ok)
@@ -558,10 +418,9 @@ export default function InterpretScreen({ onBack, onHome }) {
     if (cameraConsent === 'declined') return 'Cámara desactivada'
     if (!cameraOk && cameraError)  return 'Sin acceso a cámara'
     if (!running)                  return cameraOk ? 'Listo' : 'Conectando…'
-    if (!mlMode)                   return '⚠ Servidor IA no conectado'
-    if (!handVisible)              return 'Muestra una mano'
-    if (displaySign && inCooldown) return `${displaySign.replace(/_/g, ' ')} · ${Math.round(displayConf * 100)}%`
-    if (liveConf >= UMBRAL)        return `Reconociendo… ${Math.round(liveConf * 100)}%`
+    if (!mlMode)                   return '⚠ sign.mt no conectado'
+    if (!handVisible)              return 'Muestra las manos al firmar'
+    if (liveConf >= 0.5)           return `Firmando… ${Math.round(liveConf * 100)}%`
     if (bufferLen >= MIN_FRAMES_TO_PREDICT) return `Analizando… ${Math.round(liveConf * 100)}%`
     if (bufferLen > 0)             return 'Capturando seña…'
     return 'Haz la seña'
@@ -712,11 +571,10 @@ export default function InterpretScreen({ onBack, onHome }) {
                       <div className="absolute inset-0 flex items-center justify-center bg-pastel-ink/75 p-6 backdrop-blur-sm">
                         <div className="max-w-sm rounded-2xl border-2 border-pastel-blue-line bg-[#FAF6EC] p-5 text-center shadow-xl">
                           <p className="text-3xl">⚠️</p>
-                          <p className="mt-2 text-lg font-extrabold text-pastel-ink">Servidor IA no conectado</p>
-                          <p className="mt-1 text-xs font-semibold text-pastel-sub">Ejecuta en una terminal:</p>
-                          <code className="mt-3 block rounded-xl border-2 border-pastel-ink/10 bg-white px-3 py-2 text-left text-[11px] font-mono text-pastel-grape">
-                            cd src/sign-translate &amp;&amp; uvicorn api:app --port 8000
-                          </code>
+                          <p className="mt-2 text-lg font-extrabold text-pastel-ink">Backend sign.mt no conectado</p>
+                          <p className="mt-1 text-xs font-semibold text-pastel-sub">
+                            Requiere conexión a sign.mt. Ejecuta <code className="font-mono">npm run sync:models</code> y verifica tu red.
+                          </p>
                           <button
                             onClick={retryMlConnection}
                             className="mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white transition hover:brightness-110"
