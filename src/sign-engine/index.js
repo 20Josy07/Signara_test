@@ -5,7 +5,7 @@
 import * as tf from '@tensorflow/tfjs'
 import '@tensorflow/tfjs-backend-webgl'
 import * as THREE from 'three'
-import { signedToSpoken } from '../utils/signMtApi.js'
+import { interpretFswTokens } from '../utils/interpretApi.js'
 
 const POSE = {
   NOSE: 0,
@@ -256,7 +256,7 @@ function estimateFace(landmarks, w, h) {
 }
 
 /** Convierte resultados Holistic → tokens FSW (SignWriting). */
-export async function holisticToFswTokens(results, width, height) {
+export async function holisticToFswTokens(results, width, height, { handsOnly = false } = {}) {
   await initSignEngine()
   const tokens = []
 
@@ -268,7 +268,7 @@ export async function holisticToFswTokens(results, width, height) {
     const h = estimateHand(results.rightHandLandmarks, width, height, false)
     if (h) tokens.push(await fswBox(h.cx, h.cy, h.symbol))
   }
-  if (results.faceLandmarks?.length) {
+  if (!handsOnly && results.faceLandmarks?.length) {
     const faceParts = estimateFace(results.faceLandmarks, width, height)
     for (const f of faceParts) {
       tokens.push(await fswBox(f.cx, f.cy, f.symbol))
@@ -280,7 +280,12 @@ export async function holisticToFswTokens(results, width, height) {
 
 export async function fswTokensToText(tokens) {
   if (!tokens?.length) return ''
-  return signedToSpoken(tokens.join(''))
+  try {
+    return await interpretFswTokens(tokens)
+  } catch (err) {
+    console.warn('[sign-engine] fswTokensToText:', err?.message || err)
+    throw err
+  }
 }
 const EMPTY = { x: 0, y: 0 }
 
@@ -304,9 +309,9 @@ function normalizeForDetector(results) {
     detectorState.shoulderWidth[detectorState.shoulderWidthIndex % 20] = dist(p1, p2)
     detectorState.shoulderWidthIndex++
   }
-  if (detectorState.shoulderWidthIndex < 20) return null
+  if (detectorState.shoulderWidthIndex < 10) return null
 
-  const mean = detectorState.shoulderWidth.reduce((a, b) => a + b, 0) / 20
+  const mean = detectorState.shoulderWidth.slice(0, 10).reduce((a, b) => a + b, 0) / 10
   return [
     landmarks[POSE.NOSE],
     { x: (landmarks[POSE.LEFT_SHOULDER].x + landmarks[POSE.RIGHT_SHOULDER].x) / 2, y: (landmarks[POSE.LEFT_SHOULDER].y + landmarks[POSE.RIGHT_SHOULDER].y) / 2 },

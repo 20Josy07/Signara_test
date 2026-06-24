@@ -1,16 +1,14 @@
 /**
- * Cliente del backend Sign Translate (sign.mt).
- * En local: proxy Vite /sign-mt → sign.mt o emulador Firebase del proyecto translate.
- *
- * Proyecto fuente: C:\Users\josya\Desktop\translate
+ * Cliente sign.mt para interpretar (señas → texto).
+ * Traducción hablado→señas usa Bergamot en el navegador (bergamotTranslate.js).
  */
 
-const API_BASE =
-  import.meta.env.VITE_SIGN_MT_API_URL ||
-  (import.meta.env.DEV ? '/sign-mt' : 'https://sign.mt/api')
+import { getAppCheckToken } from './appCheck.js'
+import { SIGNED_LANG, SPOKEN_LANG } from './signLanguage.js'
 
-const SIGNED_LANG = 'ssp' // Lengua de señas española (SignWriting)
-const SPOKEN_LANG = 'es'
+const SIGN_MT_API = (
+  import.meta.env.VITE_SIGN_MT_API_URL || 'https://sign.mt/api'
+).replace(/\/$/, '')
 
 const CACHE_TTL_MS = 5 * 60 * 1000
 let cached = null
@@ -20,32 +18,35 @@ export function getSignMtCache() {
   return cached
 }
 
-/** Comprueba que el backend sign.mt responde (Bergamot spoken→signed). */
+async function signMtFetch(path, init = {}) {
+  const headers = new Headers(init.headers || {})
+  try {
+    const token = await getAppCheckToken()
+    headers.set('X-Firebase-AppCheck', token)
+    headers.set('X-AppCheck-Token', token)
+  } catch {
+    // Sin App Check algunas rutas devuelven 401
+  }
+  return fetch(`${SIGN_MT_API}${path}`, { ...init, headers })
+}
+
+/** Comprueba App Check + API sign.mt (interpretar). */
 export function checkSignMtHealth({ force = false } = {}) {
   if (!force && cached && Date.now() - cached.at < CACHE_TTL_MS) {
     return Promise.resolve(cached)
   }
   if (!force && inflight) return inflight
 
-  const params = new URLSearchParams({
-    from: SPOKEN_LANG,
-    to: SIGNED_LANG,
-    text: 'hola',
-  })
+  inflight = getAppCheckToken()
+    .then(() => ({ ok: true, at: Date.now() }))
+    .catch(() => ({ ok: false, at: Date.now() }))
+    .finally(() => {
+      inflight = null
+    })
 
-  inflight = fetch(`${API_BASE}/spoken-to-signed?${params}`)
-    .then(async (r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      const data = await r.json()
-      cached = { ok: !!data.text, at: Date.now() }
-      inflight = null
-      return cached
-    })
-    .catch(() => {
-      cached = { ok: false, at: Date.now() }
-      inflight = null
-      return cached
-    })
+  inflight.then((result) => {
+    cached = result
+  })
 
   return inflight
 }
@@ -54,26 +55,19 @@ export function warmupSignMtApi() {
   return checkSignMtHealth()
 }
 
-/** Texto hablado → SignWriting (secuencia FSW). */
-export async function spokenToSignWriting(text, {
-  spoken = SPOKEN_LANG,
-  signed = SIGNED_LANG,
-} = {}) {
-  const body = {
-    data: {
-      texts: [text.trim()],
-      spoken_language: spoken,
-      signed_language: signed,
-    },
-  }
-  const r = await fetch(`${API_BASE}/spoken-text-to-signwriting`, {
+/** Describe una seña SignWriting (FSW) en texto. */
+export async function describeSignWriting(fsw) {
+  const r = await signMtFetch('/signwriting-description', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ data: { fsw } }),
   })
-  if (!r.ok) throw new Error(`spoken-text-to-signwriting: HTTP ${r.status}`)
-  const data = await r.json()
-  return data.result?.output?.join(' ') ?? ''
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) {
+    const msg = data?.error?.message || data?.message || `HTTP ${r.status}`
+    throw new Error(`signwriting-description: ${msg}`)
+  }
+  return data.result?.description ?? ''
 }
 
 /** SignWriting → texto hablado (modo interpretar). */
@@ -85,34 +79,34 @@ export async function signedToSpoken(signWriting, {
   if (!text) return ''
 
   const params = new URLSearchParams({ from: signed, to: spoken, text })
-  const r = await fetch(`${API_BASE}/signed-to-spoken?${params}`)
-  if (!r.ok) throw new Error(`signed-to-spoken: HTTP ${r.status}`)
-  const data = await r.json()
-  return data.text ?? ''
+  const r = await signMtFetch(`/signed-to-spoken?${params}`)
+  if (r.ok) {
+    const data = await r.json()
+    if (data.text?.trim()) return data.text.trim()
+  }
+
+  // Sin modelo Bergamot signed-to-spoken para LSM: describir cada token FSW
+  const tokens = String(signWriting).split(/\s+/).filter(Boolean)
+  const parts = []
+  let lastErr = null
+  for (const fsw of tokens) {
+    try {
+      const desc = await describeSignWriting(fsw)
+      if (desc?.trim()) parts.push(desc.trim())
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  if (parts.length) return parts.join(' ')
+
+  const body = await r.clone().json().catch(() => ({}))
+  const status = r.ok ? 'vacía' : (body?.message || `HTTP ${r.status}`)
+  console.warn('[sign.mt] signed-to-spoken:', status, 'tokens:', tokens.length, lastErr?.message || '')
+  if (lastErr) throw lastErr
+  return ''
 }
 
-/** Bergamot directo: texto → SignWriting (sin Cloud Function). */
-export async function spokenToSignedBergamot(text, {
-  spoken = SPOKEN_LANG,
-  signed = SIGNED_LANG,
-} = {}) {
-  const params = new URLSearchParams({ from: spoken, to: signed, text: text.trim() })
-  const r = await fetch(`${API_BASE}/spoken-to-signed?${params}`)
-  if (!r.ok) throw new Error(`spoken-to-signed: HTTP ${r.status}`)
-  const data = await r.json()
-  return data.text ?? ''
-}
-
-/** Normalización de texto (OpenAI vía sign.mt). */
-export async function normalizeSpokenText(text, lang = SPOKEN_LANG) {
-  const params = new URLSearchParams({ lang, text })
-  const r = await fetch(`${API_BASE}/text-normalization?${params}`)
-  if (!r.ok) return text
-  const data = await r.json()
-  return data.text ?? text
-}
-
-/** URL de pose 3D firmada (Cloud Function sign.mt). */
+/** URL de pose 3D (Cloud Function sign.mt). */
 export function spokenToSignedPoseUrl(text, spoken = SPOKEN_LANG, signed = SIGNED_LANG) {
   const api = 'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_pose'
   return `${api}?text=${encodeURIComponent(text)}&spoken=${spoken}&signed=${signed}`

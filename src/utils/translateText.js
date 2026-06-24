@@ -1,20 +1,18 @@
 import { textToSignTokens } from './textNormalizer.js'
 import { getAllSignKeys } from './signMap.js'
-import {
-  spokenToSignWriting,
-  spokenToSignedPoseUrl,
-  normalizeSpokenText,
-} from './signMtApi.js'
+import { bergamotSpokenToSignWriting } from './bergamotTranslate.js'
+import { spokenToSignedPoseUrl } from './signMtApi.js'
+import { SIGNED_LANG, SPOKEN_LANG } from './signLanguage.js'
 
 /**
- * Traduce texto español → señas usando el backend sign.mt (proyecto translate).
+ * Traduce texto español → LSM (lengua de señas mexicana).
  *
  * @returns {Promise<{
  *   tokens: string[],
  *   poseUrl: string | null,
  *   text: string,
  *   fallback: string[],
- *   source: 'signmt' | 'claude' | 'local'
+ *   source: 'bergamot' | 'local'
  * }>}
  */
 export async function translateText(text) {
@@ -24,58 +22,26 @@ export async function translateText(text) {
     return { tokens: [], poseUrl: null, text: '', fallback: [], source: 'local' }
   }
 
-  let normalizedText = trimmed
   try {
-    normalizedText = await normalizeSpokenText(trimmed, 'es')
-  } catch {
-    normalizedText = trimmed
-  }
-
-  try {
-    const signWritingRaw = await spokenToSignWriting(normalizedText)
+    const signWritingRaw = await bergamotSpokenToSignWriting(trimmed, {
+      spoken: SPOKEN_LANG,
+      signed: SIGNED_LANG,
+    })
     const tokens = signWritingRaw.split(/\s+/).filter(Boolean)
     if (tokens.length > 0) {
       return {
         tokens,
-        poseUrl: spokenToSignedPoseUrl(normalizedText, 'es', 'ssp'),
-        text: normalizedText,
+        poseUrl: spokenToSignedPoseUrl(trimmed, SPOKEN_LANG, SIGNED_LANG),
+        text: trimmed,
         fallback: textToSignTokens(trimmed, signKeys),
-        source: 'signmt',
+        source: 'bergamot',
       }
     }
-  } catch {
-    // sign.mt no disponible
+  } catch (err) {
+    console.warn('[Bergamot]', err?.message || err)
   }
 
-  try {
-    const response = await fetch('/api/translate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: trimmed }),
-    })
-    if (response.ok) {
-      const data = await response.json()
-      if (data.signs?.length > 0) {
-        const normalized = data.signs
-          .map((s) => String(s).replace(/\.mp4$/i, '').toUpperCase().replace(/\s+/g, '_').trim())
-          .filter((s) => signKeys.includes(s))
-        if (normalized.length > 0) {
-          return {
-            tokens: [],
-            poseUrl: null,
-            text: trimmed,
-            fallback: normalized,
-            source: 'claude',
-          }
-        }
-      }
-    }
-  } catch {
-    // Claude no disponible
-  }
-
-  return {
-    tokens: [],
+  return {    tokens: [],
     poseUrl: null,
     text: trimmed,
     fallback: textToSignTokens(trimmed, signKeys),

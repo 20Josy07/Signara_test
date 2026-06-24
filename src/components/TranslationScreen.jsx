@@ -19,11 +19,12 @@ import { TRANSLATE_TUTORIAL_STEPS } from '../data/modeTutorialSteps.js'
 import { useModeTutorial } from '../hooks/useModeTutorial.js'
 import { translateText } from '../utils/translateText.js'
 import { textToSignTokens } from '../utils/textNormalizer.js'
+import { SIGNED_LANG_LABEL } from '../utils/signLanguage.js'
 import {
   AVATARS,
   getCurrentAvatar,
   getAllSignKeys,
-  setCurrentAvatar
+  setCurrentAvatar,
 } from '../utils/signMap.js'
 
 export default function TranslationScreen({
@@ -201,7 +202,7 @@ export default function TranslationScreen({
     ? signWriting.map((_, i) => `Seña ${i + 1}`)
     : signs.map((s) => s.replace('.mp4', '').replace(/_/g, ' ').toUpperCase())
 
-  const usingSignMt = translateSource === 'signmt' && signWriting.length > 0
+  const usingSignMt = translateSource === 'bergamot' && signWriting.length > 0
 
   const tutorial = useModeTutorial('translate')
 
@@ -237,7 +238,7 @@ export default function TranslationScreen({
                 <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
                   De palabras a{' '}
                   <span className="inline-block rounded-xl border-2 border-pastel-green-line bg-pastel-green px-2.5 py-0.5 shadow-[0_8px_18px_-8px_rgba(45,42,38,0.35)]">
-                    señas
+                    {SIGNED_LANG_LABEL}
                   </span>
                 </h1>
               </div>
@@ -323,7 +324,7 @@ export default function TranslationScreen({
                         {activeSign ? (
                           formatSign(activeSign)
                         ) : signWriting.length > 0 ? (
-                          'Señas SignWriting'
+                          `Señas ${SIGNED_LANG_LABEL}`
                         ) : signs.length > 0 ? (
                           'Interpretando…'
                         ) : (

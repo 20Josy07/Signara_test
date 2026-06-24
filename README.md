@@ -2,21 +2,25 @@
 
 **Conectando dos mundos que hoy no logran comunicarse.**
 
-Signara usa el backend y modelos del proyecto **[Sign Translate (sign.mt)](https://sign.mt)** en `C:\Users\josya\Desktop\translate`.
+Signara es tu app. Puede reutilizar modelos del proyecto open source [Sign Translate (sign.mt)](https://sign.mt) como referencia, **sin que ese proyecto sea tuyo** ni requiera Firebase/App Check.
 
 ---
 
 ## Modos
 
-### Traducir (texto/voz → señas)
-1. Texto → API `spoken-text-to-signwriting` (sign.mt)
-2. Muestra **SignWriting** y animación **pose 3D** (`spoken_text_to_signed_pose`)
-3. Si sign.mt no responde: fallback a videos MP4 locales o Claude
+### Traducir (texto/voz → señas) — funciona en tu navegador
+1. **Bergamot** (`@sign-mt/browsermt`) traduce español → SignWriting (LSM)
+2. Muestra **SignWriting** y, si está disponible, animación pose 3D
+3. Si falla: videos MP4 locales (`signMap`)
 
-### Interpretar (cámara → texto)
-1. MediaPipe detecta manos/cara
-2. Modelos TF.js (`hand-shape`, `face-features`, `sign-detector`) generan SignWriting
-3. Al terminar de firmar → API `signed-to-spoken` traduce a español
+No necesitas cuenta ni proyecto Firebase de sign.mt.
+
+### Interpretar (cámara → señas) — local + opcional tu API
+1. **MediaPipe** detecta manos
+2. **Modelos TF.js** locales generan **SignWriting** (símbolos de la seña)
+3. **Texto en español** (opcional): solo si configuras **tu propio backend** con `VITE_INTERPRET_API_URL`
+
+Sin backend propio, Interpretar muestra la seña visualmente en SignWriting, pero no palabras en español.
 
 ---
 
@@ -24,18 +28,35 @@ Signara usa el backend y modelos del proyecto **[Sign Translate (sign.mt)](https
 
 ```bash
 npm install
-npm run sync:models   # modelos + fuentes desde translate
+npm run sync:models   # copia modelos TF.js desde la carpeta translate (hermana)
 npm run dev           # http://localhost:5173
 ```
 
-Requiere conexión a internet (API sign.mt en `https://sign.mt/api`).
+`sync:models` lee modelos de `C:\Users\josya\Desktop\translate` si existe; no necesitas ejecutar translate ni sus emuladores.
 
-Opcional — backend local de translate:
-```bash
-cd C:\Users\josya\Desktop\translate\functions
-npm run emulate
+---
+
+## Interpretar con tu propio servidor (opcional)
+
+En `.env`:
+
 ```
-En Signara `.env`: `SIGN_MT_API_URL=http://localhost:4015/api`
+VITE_INTERPRET_API_URL=http://localhost:8000
+```
+
+Tu API debe aceptar `POST /interpret`:
+
+```json
+{ "tokens": ["M500x500…", "…"], "fsw": "M500x500… …" }
+```
+
+Y responder:
+
+```json
+{ "text": "hola" }
+```
+
+Ahí puedes conectar un modelo de IA entrenado por ti (p. ej. el antiguo `sign_ai` con FastAPI).
 
 ---
 
@@ -43,9 +64,10 @@ En Signara `.env`: `SIGN_MT_API_URL=http://localhost:4015/api`
 
 ```
 Signara/
-├── src/sign-engine/     → Motor TF.js portado de translate
-├── src/utils/signMtApi.js → Cliente API sign.mt
-├── public/models/       → Modelos sincronizados desde translate
+├── src/sign-engine/       → Cámara → SignWriting (TF.js + MediaPipe)
+├── src/utils/interpretApi.js → Cliente de TU API para texto
+├── src/utils/bergamotTranslate.js → Traducir sin servidor
+├── public/models/         → Modelos sincronizados
 └── scripts/sync-models.js
 ```
 

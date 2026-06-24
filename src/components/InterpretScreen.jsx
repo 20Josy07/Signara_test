@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { ResetButton, SectionLabel } from './AppShell.jsx'
+import SignWritingViewer from './SignWritingViewer.jsx'
 import ModeTutorial, { TutorialHelpButton } from './ModeTutorial.jsx'
+import { isInterpretTextEnabled } from '../utils/interpretApi.js'
 import {
   AppPage,
   AppPageFooter,
@@ -12,7 +14,6 @@ import {
 } from './PageMotion.jsx'
 import { INTERPRET_TUTORIAL_STEPS } from '../data/modeTutorialSteps.js'
 import { useModeTutorial } from '../hooks/useModeTutorial.js'
-import { checkSignMtHealth, getSignMtCache } from '../utils/signMtApi.js'
 import {
   initSignEngine,
   holisticToFswTokens,
@@ -35,7 +36,19 @@ const UMBRAL               = 0.50   // umbral detector de firma (sign-detector)
 const NO_HAND_RESET        = 20
 const SAME_SIGN_WAIT       = 20
 const MIN_FRAMES_TO_PREDICT = 4
-const PREDICT_COOLDOWN_MS  = 80
+const MIN_SIGN_HOLD_FRAMES = 4
+const PREDICT_COOLDOWN_MS   = 150
+const HANDS_DOWN_FRAMES     = 6
+
+function mergeFswTokens(buffer, newTokens) {
+  const seen = new Set(buffer)
+  for (const t of newTokens || []) {
+    if (t && !seen.has(t)) {
+      buffer.push(t)
+      seen.add(t)
+    }
+  }
+}
 
 // ── Script loader ─────────────────────────────────────────────────────────────
 
@@ -75,12 +88,15 @@ export default function InterpretScreen({ onBack, onHome }) {
   const noHandCountRef    = useRef(0)
   const cooldownRef       = useRef(0)
   const apiInFlightRef    = useRef(false)
+  const fswAccumInFlightRef = useRef(false)
   const lastPredictAtRef  = useRef(0)
   const mlAvailableRef    = useRef(false)
   const handsModelReadyRef = useRef(false)
   const signingRef = useRef(false)
   const fswBufferRef = useRef([])
   const sentenceClearRef  = useRef(null)
+  const lastResultsRef     = useRef(null)
+  const lastSigningProbRef = useRef(0)
 
   // UI state
   const [scriptsLoaded, setScriptsLoaded] = useState(false)
@@ -102,34 +118,34 @@ export default function InterpretScreen({ onBack, onHome }) {
   const [latest,        setLatest]        = useState(null)
   const [history,       setHistory]       = useState([])
   const [sentence,      setSentence]      = useState([])
+  const [lastFswTokens, setLastFswTokens] = useState([])
+  const [apiHint,       setApiHint]       = useState(null)
+  const [liveFswCount,  setLiveFswCount]  = useState(0)
+  const [engineError,   setEngineError]   = useState(null)
 
   useEffect(() => { runningRef.current = running }, [running])
   useEffect(() => { audioRef.current   = audioOn  }, [audioOn])
 
-  // ── Verificar backend sign.mt + cargar modelos de mano ─────────────────────
+  // ── Cargar modelos TF.js (sin App Check aquí: compite con la cámara) ───────
   useEffect(() => {
     let cancelled = false
-    const cached = getSignMtCache()
-
-    if (cached) {
-      mlAvailableRef.current = cached.ok
-      setMlMode(cached.ok)
-      setMlConnecting(false)
-    } else {
-      setMlConnecting(true)
-    }
-
-    checkSignMtHealth().then((result) => {
-      if (cancelled) return
-      mlAvailableRef.current = result.ok
-      setMlMode(result.ok)
-      setMlConnecting(false)
-    })
-
+    setMlConnecting(true)
     initSignEngine()
-      .then(() => { handsModelReadyRef.current = true })
-      .catch(() => { handsModelReadyRef.current = false })
-
+      .then(() => {
+        if (cancelled) return
+        handsModelReadyRef.current = true
+        mlAvailableRef.current = true
+        setMlMode(true)
+        setMlConnecting(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        handsModelReadyRef.current = false
+        mlAvailableRef.current = false
+        setEngineError(String(err?.message || 'Modelos no cargados'))
+        setMlMode(false)
+        setMlConnecting(false)
+      })
     return () => { cancelled = true }
   }, [])
 
@@ -162,7 +178,7 @@ export default function InterpretScreen({ onBack, onHome }) {
       modelComplexity:        0,
       smoothLandmarks:        true,
       enableSegmentation:     false,
-      refineFaceLandmarks:    true,
+      refineFaceLandmarks:    false,
       minDetectionConfidence: 0.5,
       minTrackingConfidence:  0.5,
     })
@@ -175,7 +191,7 @@ export default function InterpretScreen({ onBack, onHome }) {
           try { await holisticRef.current.send({ image: videoEl }) } catch (_) {}
         }
       },
-      width: 320, height: 240,
+      width: 640, height: 480,
     })
     cameraRef.current = camera
 
@@ -228,6 +244,71 @@ export default function InterpretScreen({ onBack, onHome }) {
     } catch (e) { console.warn(e) }
   }
 
+  const finalizeCapturedSign = useCallback((tokens, confidence) => {
+    if (!tokens?.length || apiInFlightRef.current) return
+    apiInFlightRef.current = true
+    setLastFswTokens(tokens)
+    fswBufferRef.current = []
+    landmarkBufferRef.current = []
+    signingRef.current = false
+    setLiveFswCount(0)
+
+    fswTokensToText(tokens)
+      .then((text) => {
+        if (text?.trim()) {
+          const prediction = text.trim()
+          triggerRecognition(prediction.replace(/\s+/g, '_'), confidence)
+          setDisplaySign(prediction.replace(/\s+/g, '_'))
+          setApiHint(null)
+        } else {
+          setLatest({ sign: '', text: '', confidence })
+          setDisplaySign('')
+          setApiHint(
+            isInterpretTextEnabled()
+              ? 'Seña capturada en SignWriting, pero tu API no devolvió texto.'
+              : 'Seña capturada en SignWriting. El texto en español requiere tu propio servidor ' +
+                '(VITE_INTERPRET_API_URL en .env).',
+          )
+        }
+        setDisplayConf(confidence)
+        cooldownRef.current = SAME_SIGN_WAIT
+        setInCooldown(true)
+      })
+      .catch((err) => {
+        console.warn('[interpret] traducción:', err?.message || err)
+        setApiHint(
+          'SignWriting capturado. Error al pedir texto a tu API: ' +
+          (err?.message || 'revisa la consola (F12).'),
+        )
+      })
+      .finally(() => { apiInFlightRef.current = false })
+  }, [])
+
+  const captureFromResults = useCallback(async (results, w, h, confidence = 0.7) => {
+    if (!results || !handsModelReadyRef.current) return
+    const tokens = await holisticToFswTokens(results, w, h, { handsOnly: true })
+    if (!tokens?.length) {
+      setApiHint('No se leyeron las manos. Acércate, buena luz, manos abiertas frente a la cámara.')
+      return
+    }
+    finalizeCapturedSign(tokens, confidence)
+  }, [finalizeCapturedSign])
+
+  const captureNow = useCallback(async () => {
+    const results = lastResultsRef.current
+    const canvas = canvasRef.current
+    if (!results || !canvas) {
+      setApiHint('Espera a que la cámara esté activa y las manos se vean.')
+      return
+    }
+    await captureFromResults(
+      results,
+      canvas.width,
+      canvas.height,
+      lastSigningProbRef.current || 0.7,
+    )
+  }, [captureFromResults])
+
   // ── Confirmar seña ────────────────────────────────────────────────────────
   function triggerRecognition(sign, confidence) {
     const text = sign.replace(/_/g, ' ')
@@ -242,6 +323,7 @@ export default function InterpretScreen({ onBack, onHome }) {
 
   // ── Callback principal de MediaPipe ───────────────────────────────────────
   function handleResults(results) {
+    lastResultsRef.current = results
     const canvas = canvasRef.current
     const video  = videoRef.current
     if (!canvas || !video) return
@@ -284,11 +366,21 @@ export default function InterpretScreen({ onBack, onHome }) {
 
     // ── Sin manos ────────────────────────────────────────────────────────────
     if (!hasHands) {
+      if (
+        fswBufferRef.current.length > 0 &&
+        landmarkBufferRef.current.length >= MIN_SIGN_HOLD_FRAMES &&
+        cooldownRef.current === 0
+      ) {
+        finalizeCapturedSign(
+          [...fswBufferRef.current],
+          lastSigningProbRef.current || 0.5,
+        )
+      }
+      signingRef.current = false
       noHandCountRef.current++
       if (noHandCountRef.current >= NO_HAND_RESET) {
-        // Reset completo igual que Python
-        landmarkBufferRef.current = []
         fswBufferRef.current = []
+        landmarkBufferRef.current = []
         cooldownRef.current       = 0
         setDisplaySign('')
         setDisplayConf(0)
@@ -304,65 +396,39 @@ export default function InterpretScreen({ onBack, onHome }) {
 
     const w = canvas.width
     const h = canvas.height
-    const signingProb = handsModelReadyRef.current ? detectSigning(results) : 0
+    const poseOk = results.poseLandmarks?.length > 0
+    const signingProb = handsModelReadyRef.current && poseOk ? detectSigning(results) : (hasHands ? 0.5 : 0)
+    lastSigningProbRef.current = signingProb
     setLiveConf(signingProb)
 
-    const wasSigning = signingRef.current
-    signingRef.current = signingProb > 0.5
-
-    if (signingRef.current && handsModelReadyRef.current) {
+    // Acumular FSW siempre que hay manos (no depende del sign-detector)
+    if (runningRef.current && handsModelReadyRef.current && cooldownRef.current === 0) {
       landmarkBufferRef.current.push(1)
-      if (Date.now() - lastPredictAtRef.current >= PREDICT_COOLDOWN_MS && !apiInFlightRef.current) {
-        lastPredictAtRef.current = Date.now()
-        apiInFlightRef.current = true
-        holisticToFswTokens(results, w, h)
+      const now = Date.now()
+      if (now - lastPredictAtRef.current >= PREDICT_COOLDOWN_MS && !fswAccumInFlightRef.current) {
+        lastPredictAtRef.current = now
+        fswAccumInFlightRef.current = true
+        holisticToFswTokens(results, w, h, { handsOnly: true })
           .then((tokens) => {
-            if (tokens?.length) fswBufferRef.current = tokens
+            if (tokens?.length) {
+              mergeFswTokens(fswBufferRef.current, tokens)
+              setLiveFswCount(fswBufferRef.current.length)
+              setLastFswTokens([...fswBufferRef.current])
+            }
           })
-          .finally(() => { apiInFlightRef.current = false })
+          .catch((err) => {
+            console.warn('[interpret] FSW:', err?.message || err)
+          })
+          .finally(() => { fswAccumInFlightRef.current = false })
       }
     }
 
-    const n = landmarkBufferRef.current.length
-    setBufferLen(n)
-
-    // Al terminar de firmar → traducir SignWriting acumulado
-    if (
-      wasSigning &&
-      !signingRef.current &&
-      fswBufferRef.current.length > 0 &&
-      mlAvailableRef.current &&
-      cooldownRef.current === 0 &&
-      !apiInFlightRef.current
-    ) {
-      apiInFlightRef.current = true
-      const tokens = [...fswBufferRef.current]
-      fswBufferRef.current = []
-      landmarkBufferRef.current = []
-
-      fswTokensToText(tokens)
-        .then((text) => {
-          if (!text?.trim()) return
-          const prediction = text.trim()
-          const confidence = signingProb
-          triggerRecognition(prediction.replace(/\s+/g, '_'), confidence)
-          setDisplaySign(prediction.replace(/\s+/g, '_'))
-          setDisplayConf(confidence)
-          cooldownRef.current = SAME_SIGN_WAIT
-          setInCooldown(true)
-        })
-        .catch(() => {
-          mlAvailableRef.current = false
-          setMlMode(false)
-        })
-        .finally(() => { apiInFlightRef.current = false })
-    }
+    setBufferLen(landmarkBufferRef.current.length)
   }
 
   // ── Controles ─────────────────────────────────────────────────────────────
   function startDetect() {
     landmarkBufferRef.current = []
-    fswBufferRef.current      = []
     fswBufferRef.current      = []
     signingRef.current        = false
     noHandCountRef.current    = 0
@@ -374,6 +440,14 @@ export default function InterpretScreen({ onBack, onHome }) {
     setInCooldown(false)
     setDisplaySign('')
     setDisplayConf(0)
+    setLastFswTokens([])
+    setLiveFswCount(0)
+    setApiHint(null)
+    if (!isInterpretTextEnabled()) {
+      setApiHint(
+        'Modo visual: verás la seña en SignWriting. Para texto en español, configura VITE_INTERPRET_API_URL.',
+      )
+    }
     setRunning(true)
   }
 
@@ -404,10 +478,16 @@ export default function InterpretScreen({ onBack, onHome }) {
 
   function retryMlConnection() {
     setMlConnecting(true)
-    checkSignMtHealth({ force: true })
-      .then((result) => {
-        mlAvailableRef.current = result.ok
-        setMlMode(result.ok)
+    initSignEngine()
+      .then(() => {
+        handsModelReadyRef.current = true
+        mlAvailableRef.current = true
+        setMlMode(true)
+        setMlConnecting(false)
+      })
+      .catch(() => {
+        handsModelReadyRef.current = false
+        setMlMode(false)
         setMlConnecting(false)
       })
   }
@@ -418,12 +498,11 @@ export default function InterpretScreen({ onBack, onHome }) {
     if (cameraConsent === 'declined') return 'Cámara desactivada'
     if (!cameraOk && cameraError)  return 'Sin acceso a cámara'
     if (!running)                  return cameraOk ? 'Listo' : 'Conectando…'
-    if (!mlMode)                   return '⚠ sign.mt no conectado'
-    if (!handVisible)              return 'Muestra las manos al firmar'
-    if (liveConf >= 0.5)           return `Firmando… ${Math.round(liveConf * 100)}%`
-    if (bufferLen >= MIN_FRAMES_TO_PREDICT) return `Analizando… ${Math.round(liveConf * 100)}%`
-    if (bufferLen > 0)             return 'Capturando seña…'
-    return 'Haz la seña'
+    if (!mlMode)                   return '⚠ Modelos de IA no listos'
+    if (!handVisible)              return 'Muestra las manos frente a la cámara'
+    if (liveFswCount > 0)          return `Leyendo seña… (${liveFswCount} símbolo${liveFswCount > 1 ? 's' : ''})`
+    if (bufferLen > 0)             return 'Capturando… baja las manos o pulsa Capturar'
+    return 'Haz una seña y manténla 1–2 s'
   })()
 
   const bufferProgress = running && mlMode && handVisible && !inCooldown
@@ -571,9 +650,9 @@ export default function InterpretScreen({ onBack, onHome }) {
                       <div className="absolute inset-0 flex items-center justify-center bg-pastel-ink/75 p-6 backdrop-blur-sm">
                         <div className="max-w-sm rounded-2xl border-2 border-pastel-blue-line bg-[#FAF6EC] p-5 text-center shadow-xl">
                           <p className="text-3xl">⚠️</p>
-                          <p className="mt-2 text-lg font-extrabold text-pastel-ink">Backend sign.mt no conectado</p>
+                          <p className="mt-2 text-lg font-extrabold text-pastel-ink">Modelos de IA no cargados</p>
                           <p className="mt-1 text-xs font-semibold text-pastel-sub">
-                            Requiere conexión a sign.mt. Ejecuta <code className="font-mono">npm run sync:models</code> y verifica tu red.
+                            Ejecuta <code className="font-mono">npm run sync:models</code> y recarga la página.
                           </p>
                           <button
                             onClick={retryMlConnection}
@@ -628,13 +707,22 @@ export default function InterpretScreen({ onBack, onHome }) {
                         Empezar a interpretar
                       </button>
                     ) : (
-                      <button
-                        onClick={stopDetect}
-                        className="inline-flex h-11 items-center gap-2 rounded-xl border-2 border-pastel-ink/20 bg-white px-5 text-sm font-bold text-pastel-ink transition hover:bg-pastel-cream"
-                      >
-                        <StopIcon />
-                        Detener
-                      </button>
+                      <>
+                        <button
+                          onClick={captureNow}
+                          disabled={!handVisible || !mlMode}
+                          className="inline-flex h-11 items-center gap-2 rounded-xl border-2 border-pastel-grape bg-white px-5 text-sm font-bold text-pastel-grape transition hover:bg-pastel-purple/30 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Capturar seña
+                        </button>
+                        <button
+                          onClick={stopDetect}
+                          className="inline-flex h-11 items-center gap-2 rounded-xl border-2 border-pastel-ink/20 bg-white px-5 text-sm font-bold text-pastel-ink transition hover:bg-pastel-cream"
+                        >
+                          <StopIcon />
+                          Detener
+                        </button>
+                      </>
                     )}
 
                     <label className="ml-auto inline-flex cursor-pointer select-none items-center gap-2 rounded-xl border-2 border-white/60 bg-white/80 px-3 py-2 text-sm font-bold text-pastel-ink">
@@ -660,8 +748,12 @@ export default function InterpretScreen({ onBack, onHome }) {
                 {!running && !history.length && (
                   <div className="rounded-2xl border-2 border-dashed border-pastel-blue-line bg-pastel-blue/40 px-4 py-4 text-center">
                     <p className="text-sm font-bold text-pastel-ink">
-                      Pulsa <strong className="text-pastel-grape">Empezar a interpretar</strong> y mantén cada seña unos segundos, clara y estable, antes de cambiar.
+                      Pulsa <strong className="text-pastel-grape">Empezar a interpretar</strong>.
+                      Sostén la seña 1–2 s con las manos visibles, luego <strong>baja las manos</strong> o usa <strong>Capturar seña</strong>.
                     </p>
+                    {engineError && (
+                      <p className="mt-2 text-xs font-semibold text-red-700">{engineError}</p>
+                    )}
                   </div>
                 )}
               </AppPageStagger>
@@ -672,11 +764,28 @@ export default function InterpretScreen({ onBack, onHome }) {
                   className="motion-surface animate-motion-scale-in rounded-[1.5rem] border-[3px] border-pastel-blue-line bg-white p-5 shadow-[0_16px_36px_-22px_rgba(45,42,38,0.35)] sm:p-6"
                 >
                   <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">Última seña</p>
-                  {latest ? (
+                  {latest || lastFswTokens.length > 0 ? (
                     <>
-                      <p className="mt-3 text-4xl font-extrabold uppercase tracking-tight text-pastel-grape sm:text-5xl">
-                        {latest.sign.replace(/_/g, ' ')}
-                      </p>
+                      {latest?.sign ? (
+                        <p className="mt-3 text-4xl font-extrabold uppercase tracking-tight text-pastel-grape sm:text-5xl">
+                          {latest.sign.replace(/_/g, ' ')}
+                        </p>
+                      ) : null}
+                      {lastFswTokens.length > 0 && (
+                        <div className="mt-4 rounded-xl border-2 border-pastel-blue-line/60 bg-pastel-cream/80 p-3">
+                          <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-pastel-sub">
+                            SignWriting detectado
+                            {running && liveFswCount > 0 ? ` (${liveFswCount})` : ''}
+                          </p>
+                          <SignWritingViewer tokens={lastFswTokens} />
+                        </div>
+                      )}
+                      {apiHint && (
+                        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+                          {apiHint}
+                        </p>
+                      )}
+                      {latest?.sign && (
                       <div className="mt-4">
                         <div className="mb-1 flex justify-between text-xs font-bold text-pastel-sub">
                           <span>Confianza</span>
@@ -689,6 +798,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                           />
                         </div>
                       </div>
+                      )}
                     </>
                   ) : (
                     <div className="mt-4 flex flex-col items-center rounded-xl border-2 border-dashed border-pastel-ink/10 bg-pastel-cream/50 px-4 py-8 text-center">

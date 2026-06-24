@@ -44,4 +44,24 @@ if (existsSync(fontSrc)) {
   console.log('✓ fuentes SignWriting')
 }
 
+const browsermtPkg = join(root, 'node_modules', '@sign-mt', 'browsermt')
+const browsermtDest = join(root, 'public', 'browsermt')
+if (existsSync(browsermtPkg)) {
+  mkdirSync(browsermtDest, { recursive: true })
+  const copies = [
+    ['artifacts/bergamot-translator-worker.js', 'bergamot-translator-worker.js'],
+    ['artifacts/bergamot-translator-worker.wasm', 'bergamot-translator-worker.wasm'],
+    ['build/bundled/worker.js', 'worker.js'],
+  ]
+  for (const [srcRel, destName] of copies) {
+    const src = join(browsermtPkg, ...srcRel.split('/'))
+    if (existsSync(src)) {
+      cpSync(src, join(browsermtDest, destName))
+      console.log('✓ browsermt/', destName)
+    }
+  }
+} else {
+  console.warn('Omitido: npm install @sign-mt/browsermt')
+}
+
 console.log('\nSincronizado desde', translateRoot)
