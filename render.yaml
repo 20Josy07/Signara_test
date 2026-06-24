@@ -1,11 +1,11 @@
-# Blueprint Render — API ML en sign_ai (https://signara-test.onrender.com)
+# Blueprint Render — API ML en src/sign-translate (https://signara-test.onrender.com)
 # La web está en Netlify.
 
 services:
   - type: web
     name: signara-test
     runtime: python
-    rootDir: sign_ai
+    rootDir: src/sign-translate
     buildCommand: pip install -r requirements_api.txt
     startCommand: bash start.sh
     envVars:

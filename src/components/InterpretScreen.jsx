@@ -715,7 +715,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                           <p className="mt-2 text-lg font-extrabold text-pastel-ink">Servidor IA no conectado</p>
                           <p className="mt-1 text-xs font-semibold text-pastel-sub">Ejecuta en una terminal:</p>
                           <code className="mt-3 block rounded-xl border-2 border-pastel-ink/10 bg-white px-3 py-2 text-left text-[11px] font-mono text-pastel-grape">
-                            cd sign_ai &amp;&amp; uvicorn api:app --port 8000
+                            cd src/sign-translate &amp;&amp; uvicorn api:app --port 8000
                           </code>
                           <button
                             onClick={retryMlConnection}

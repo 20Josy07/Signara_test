@@ -1,4 +1,4 @@
-// Índices faciales MediaPipe — deben coincidir con FACE_IDX en sign_ai/core/gnn_model.py
+// Índices faciales MediaPipe — deben coincidir con FACE_IDX en src/sign-translate/core/gnn_model.py
 const FACE_IDX_RAW = [
   61, 146, 91, 181, 84, 17, 314, 405, 321, 375,
   291, 409, 270, 269, 267, 0, 37, 39, 40, 185,

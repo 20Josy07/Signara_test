@@ -1,5 +1,9 @@
 import { COMPACT_DIM } from '../data/faceIdx.js'
 
+/**
+ * API del backend ML (src/sign-translate/api.py).
+ * En local: cd src/sign-translate && uvicorn api:app --port 8000
+ */
 export const ML_API_URL =
   import.meta.env.VITE_ML_API_URL ||
   (import.meta.env.PROD

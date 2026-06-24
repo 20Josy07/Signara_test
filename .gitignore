@@ -25,9 +25,9 @@ datasets/
 *.pkl
 *.csv
 # Ignorar modelo legacy y datos de entrenamiento, NO el modelo GNN
-sign_ai/models/signara_lstm.keras
-sign_ai/models/labels.json
-sign_ai/data/
+src/sign-translate/models/signara_lstm.keras
+src/sign-translate/models/labels.json
+src/sign-translate/data/
 
 # =========================
 # SISTEMA / OS
