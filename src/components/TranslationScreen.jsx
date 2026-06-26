@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ResetButton, SectionLabel } from './AppShell.jsx'
 import AvatarPlayer from './AvatarPlayer.jsx'
 import SignWritingViewer from './SignWritingViewer.jsx'
-import PoseViewer from './PoseViewer.jsx'
 import TextInputPanel from './TextInputPanel.jsx'
 import SignChips from './SignChips.jsx'
 import ModeTutorial, { TutorialHelpButton } from './ModeTutorial.jsx'
@@ -37,7 +36,6 @@ export default function TranslationScreen({
   const [originalText, setOriginalText] = useState('')
   const [signs, setSigns] = useState([])
   const [signWriting, setSignWriting] = useState([])
-  const [poseUrl, setPoseUrl] = useState(null)
   const [translateSource, setTranslateSource] = useState(null)
   const [activeSign, setActiveSign] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -76,7 +74,6 @@ export default function TranslationScreen({
     setOriginalText('')
     setSigns([])
     setSignWriting([])
-    setPoseUrl(null)
     setTranslateSource(null)
     setActiveSign(null)
     setBusy(false)
@@ -108,7 +105,6 @@ export default function TranslationScreen({
     setBusy(true)
     setOriginalText(text)
     setSignWriting([])
-    setPoseUrl(null)
     try {
       const result = await translateText(text)
       setTranslateSource(result.source)
@@ -116,7 +112,6 @@ export default function TranslationScreen({
 
       if (result.tokens?.length) {
         setSignWriting(result.tokens)
-        setPoseUrl(result.poseUrl)
         setSigns(result.tokens)
       } else if (result.fallback?.length) {
         setSigns(result.fallback)
@@ -336,9 +331,7 @@ export default function TranslationScreen({
 
                   <div className="relative flex flex-1 items-center justify-center rounded-[1.5rem] border-2 border-white/60 bg-[#FAF6EC]/90 p-4 shadow-inner sm:p-6 min-h-[320px]">
                     <div className="w-full max-w-lg">
-                      {usingSignMt && poseUrl ? (
-                        <PoseViewer src={poseUrl} />
-                      ) : usingSignMt ? (
+                      {usingSignMt && signWriting.length > 0 ? (
                         <SignWritingViewer tokens={signWriting} />
                       ) : (
                         <AvatarPlayer

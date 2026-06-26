@@ -10,8 +10,8 @@ Signara es tu app. Puede reutilizar modelos del proyecto open source [Sign Trans
 
 ### Traducir (texto/voz → señas) — funciona en tu navegador
 1. **Bergamot** (`@sign-mt/browsermt`) traduce español → SignWriting (LSM)
-2. Muestra **SignWriting** y, si está disponible, animación pose 3D
-3. Si falla: videos MP4 locales (`signMap`)
+2. Muestra **SignWriting** (símbolos de la seña en pantalla)
+3. Si Bergamot falla: videos MP4 locales del avatar (`signMap`)
 
 No necesitas cuenta ni proyecto Firebase de sign.mt.
 
