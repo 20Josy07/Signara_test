@@ -11,6 +11,7 @@ Uso:
 import os
 import glob
 import json
+import sys
 import numpy as np
 import pandas as pd
 import torch
@@ -277,3 +278,9 @@ print(f"   Mejor val acc : {best_val_acc:.1f}%")
 print(f"   Modelo        -> {MODEL_PATH}")
 print(f"   Labels        -> {LABEL_PATH}")
 print(f"   Meta          -> {META_PATH}")
+
+try:
+    import subprocess
+    subprocess.run([sys.executable, "09_export_onnx.py"], check=True)
+except Exception as exc:
+    print(f"   ONNX          -> no exportado ({exc})")

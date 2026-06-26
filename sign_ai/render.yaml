@@ -3,7 +3,7 @@ services:
     name: signara-test
     runtime: python
     rootDir: sign_ai
-    buildCommand: pip install -r requirements_api_render.txt
+    buildCommand: pip install -r requirements_api.txt
     startCommand: bash start.sh
     envVars:
       - key: PYTHON_VERSION
