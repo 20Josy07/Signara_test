@@ -106,8 +106,7 @@ export async function signedToSpoken(signWriting, {
   return ''
 }
 
-/** URL de pose 3D (Cloud Function sign.mt). */
-export function spokenToSignedPoseUrl(text, spoken = SPOKEN_LANG, signed = SIGNED_LANG) {
-  const api = 'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_pose'
-  return `${api}?text=${encodeURIComponent(text)}&spoken=${spoken}&signed=${signed}`
+/** URL de pose 3D (Cloud Function sign.mt) — deshabilitado: requiere App Check ajeno. */
+export function spokenToSignedPoseUrl() {
+  return null
 }

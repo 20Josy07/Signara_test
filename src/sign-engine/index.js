@@ -31,8 +31,9 @@ const HEEL_VIEW = new Set(['񁹱', '񁳱', '񆆑', '񅱑', '񁶱', '񂍑', '񂊑
 
 let models = null
 let fswModule = null
-let fontsReady = false
 let detectorState = { lastPose: null, lastTimestamp: 0, shoulderWidth: new Float32Array(20).fill(0), shoulderWidthIndex: 0 }
+
+export { loadSignWritingFonts, areSignWritingFontsReady } from '../utils/signWritingFonts.js'
 
 export async function initSignEngine() {
   if (models) return models
@@ -57,14 +58,6 @@ async function loadFsw() {
     fswModule = await import('@sutton-signwriting/font-ttf/fsw/fsw')
   }
   return fswModule
-}
-
-export async function loadSignWritingFonts() {
-  if (fontsReady) return
-  const font = await import('@sutton-signwriting/font-ttf/font/font.min')
-  await new Promise((resolve) => font.cssAppend('/fonts/signwriting/', resolve))
-  await new Promise((resolve) => font.cssLoaded(resolve))
-  fontsReady = true
 }
 
 function toVectors(landmarks, w, h) {

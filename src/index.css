@@ -14,7 +14,23 @@ body,
   padding: 0;
 }
 
-/* SignWriting (Bergamot) — mismos estilos que translate */
+@font-face {
+  font-family: 'SuttonSignWritingOneD';
+  src: url('/fonts/signwriting/SuttonSignWritingOneD.ttf') format('truetype');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'SuttonSignWritingFill';
+  src: url('/fonts/signwriting/SuttonSignWritingFill.ttf') format('truetype');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'SuttonSignWritingLine';
+  src: url('/fonts/signwriting/SuttonSignWritingLine.ttf') format('truetype');
+  font-display: swap;
+}
+
+/* SignWriting (Bergamot) */
 .signwriting-panel fsw-sign {
   direction: ltr;
   display: block;

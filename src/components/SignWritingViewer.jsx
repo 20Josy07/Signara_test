@@ -1,25 +1,33 @@
 import { useEffect, useRef, useState } from 'react'
-import { loadSignWritingFonts } from '../sign-engine/index.js'
+import { loadSignWritingFonts } from '../utils/signWritingFonts.js'
 
-let sgnwLoaded = false
-let sgnwLoadPromise = null
+let sgnwDefined = false
+let sgnwDefinePromise = null
 
-function ensureSgnwComponents() {
-  if (sgnwLoaded) return Promise.resolve()
-  if (sgnwLoadPromise) return sgnwLoadPromise
+async function ensureSgnwComponents() {
+  await loadSignWritingFonts()
+  if (sgnwDefined) return
+  if (!sgnwDefinePromise) {
+    sgnwDefinePromise = import('@sutton-signwriting/sgnw-components/loader')
+      .then(({ defineCustomElements }) => {
+        defineCustomElements()
+        sgnwDefined = true
+      })
+      .catch((err) => {
+        sgnwDefinePromise = null
+        throw err
+      })
+  }
+  return sgnwDefinePromise
+}
 
-  sgnwLoadPromise = loadSignWritingFonts()
-    .then(async () => {
-      const { defineCustomElements } = await import('@sutton-signwriting/sgnw-components/loader')
-      defineCustomElements()
-      sgnwLoaded = true
-    })
-    .catch((err) => {
-      sgnwLoadPromise = null
-      throw err
-    })
-
-  return sgnwLoadPromise
+function mountTokens(container, tokens) {
+  container.innerHTML = ''
+  for (const fsw of tokens) {
+    const sign = document.createElement('fsw-sign')
+    sign.setAttribute('sign', fsw)
+    container.appendChild(sign)
+  }
 }
 
 /** Muestra secuencia SignWriting (tokens FSW de Bergamot). */
@@ -36,24 +44,29 @@ export default function SignWritingViewer({ tokens = [], className = '' }) {
     let cancelled = false
     setStatus('loading')
 
-    ensureSgnwComponents()
-      .then(() => {
-        if (cancelled) return
-        const el = ref.current
-        if (!el) return
-        el.innerHTML = ''
-        for (const fsw of tokens) {
-          const sign = document.createElement('fsw-sign')
-          sign.setAttribute('sign', fsw)
-          el.appendChild(sign)
-        }
-        setStatus('ready')
-      })
-      .catch((err) => {
-        if (cancelled) return
-        console.warn('[SignWritingViewer]', err?.message || err)
-        setStatus('error')
-      })
+    const run = async () => {
+      await ensureSgnwComponents()
+      if (cancelled) return
+
+      // Esperar a que el ref del DOM exista (Strict Mode / primer paint)
+      for (let i = 0; i < 20 && !ref.current; i++) {
+        await new Promise((r) => requestAnimationFrame(r))
+      }
+
+      const el = ref.current
+      if (!el) {
+        throw new Error('contenedor SignWriting no disponible')
+      }
+
+      mountTokens(el, tokens)
+      if (!cancelled) setStatus('ready')
+    }
+
+    run().catch((err) => {
+      if (cancelled) return
+      console.warn('[SignWritingViewer]', err?.message || err)
+      setStatus('error')
+    })
 
     return () => { cancelled = true }
   }, [tokens])
@@ -69,13 +82,14 @@ export default function SignWritingViewer({ tokens = [], className = '' }) {
       )}
       {status === 'error' && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-center text-sm font-semibold text-amber-900">
-          No se pudieron dibujar los símbolos. Comprueba que las fuentes estén en /fonts/signwriting/.
+          No se pudieron dibujar los símbolos. Recarga la página o prueba otro navegador.
         </p>
       )}
       <div
         ref={ref}
         className="flex min-h-[280px] flex-col items-center justify-center py-2"
         aria-label="Secuencia SignWriting"
+        aria-busy={status === 'loading'}
       />
     </div>
   )
