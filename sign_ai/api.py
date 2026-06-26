@@ -14,8 +14,7 @@ from pydantic import BaseModel
 from core.confusion import evaluate_prediction
 from core.onnx_runtime import load_onnx_session, predict_proba_onnx
 from core.preprocess import sequence_compact_to_gnn
-from core.sign_constants import COMPACT_DIM, COMPACT_HAND_DIM, LEGACY_HAND_NODES
-from core.gnn_legacy import LEGACY_N_NODES, LEGACY_SEQ_LEN
+from core.sign_constants import COMPACT_DIM, COMPACT_HAND_DIM, LEGACY_N_NODES, LEGACY_SEQ_LEN
 
 ONNX_MODEL_PATH = os.getenv("SIGNARA_ONNX_PATH", "models/signara_gnn.onnx")
 GNN_LABEL_PATH = "models/labels_gnn.json"

@@ -4,10 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from core.sign_constants import N_FEATURES
-
-LEGACY_N_NODES = 42
-LEGACY_SEQ_LEN = 30
+from core.sign_constants import LEGACY_N_NODES, LEGACY_SEQ_LEN, N_FEATURES
 
 HAND_CONNECTIONS = [
     (0, 1), (1, 2), (2, 3), (3, 4),
