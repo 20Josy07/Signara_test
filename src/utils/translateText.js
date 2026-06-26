@@ -1,6 +1,7 @@
 import { textToSignTokens } from './textNormalizer.js'
 import { getAllSignKeys } from './signMap.js'
 import { bergamotSpokenToSignWriting } from './bergamotTranslate.js'
+import { normalizeFswTokens } from './signWritingNormalize.js'
 import { SIGNED_LANG, SPOKEN_LANG } from './signLanguage.js'
 
 /**
@@ -25,7 +26,8 @@ export async function translateText(text) {
       spoken: SPOKEN_LANG,
       signed: SIGNED_LANG,
     })
-    const tokens = signWritingRaw.split(/\s+/).filter(Boolean)
+    const rawTokens = signWritingRaw.split(/\s+/).filter(Boolean)
+    const tokens = await normalizeFswTokens(rawTokens)
     if (tokens.length > 0) {
       return {
         tokens,

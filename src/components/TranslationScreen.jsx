@@ -112,12 +112,18 @@ export default function TranslationScreen({
 
       if (result.tokens?.length) {
         setSignWriting(result.tokens)
-        setSigns(result.tokens)
-      } else if (result.fallback?.length) {
-        setSigns(result.fallback)
-        if (avatarRef.current) avatarRef.current.replace(result.fallback)
       } else {
-        setSigns([])
+        setSignWriting([])
+      }
+
+      const avatarSigns = result.fallback?.length ? result.fallback : []
+      setSigns(avatarSigns)
+
+      // Avatar MP4 solo si Bergamot no devolvió SignWriting
+      if (!result.tokens?.length && avatarSigns.length) {
+        requestAnimationFrame(() => avatarRef.current?.replace(avatarSigns))
+      } else if (avatarRef.current) {
+        avatarRef.current.clear()
       }
     } catch (e) {
       console.error(e)
@@ -197,7 +203,8 @@ export default function TranslationScreen({
     ? signWriting.map((_, i) => `Seña ${i + 1}`)
     : signs.map((s) => s.replace('.mp4', '').replace(/_/g, ' ').toUpperCase())
 
-  const usingSignMt = translateSource === 'bergamot' && signWriting.length > 0
+  const bergamotActive = translateSource === 'bergamot' && signWriting.length > 0
+  const hasAvatarSigns = signs.length > 0 && !bergamotActive
 
   const tutorial = useModeTutorial('translate')
 
@@ -246,14 +253,14 @@ export default function TranslationScreen({
                   </StatusPill>
                 )}
                 {busy && <StatusPill variant="busy">Procesando…</StatusPill>}
-                {signs.length > 0 && !usingSignMt && (
-                  <StatusPill variant="count">
-                    {signs.length} {signs.length === 1 ? 'seña' : 'señas'}
-                  </StatusPill>
-                )}
-                {signWriting.length > 0 && (
+                {bergamotActive && (
                   <StatusPill variant="count">
                     {signWriting.length} SignWriting
+                  </StatusPill>
+                )}
+                {hasAvatarSigns && (
+                  <StatusPill variant="count">
+                    {signs.length} {signs.length === 1 ? 'seña' : 'señas'}
                   </StatusPill>
                 )}
                 <StatusPill variant="avatar">🧑 {avatar.name}</StatusPill>
@@ -318,9 +325,9 @@ export default function TranslationScreen({
                       <p className="mt-1 text-xl font-extrabold text-pastel-ink sm:text-2xl">
                         {activeSign ? (
                           formatSign(activeSign)
-                        ) : signWriting.length > 0 ? (
+                        ) : bergamotActive ? (
                           `Señas ${SIGNED_LANG_LABEL}`
-                        ) : signs.length > 0 ? (
+                        ) : hasAvatarSigns ? (
                           'Interpretando…'
                         ) : (
                           'El avatar te espera'
@@ -331,8 +338,8 @@ export default function TranslationScreen({
 
                   <div className="relative flex flex-1 items-center justify-center rounded-[1.5rem] border-2 border-white/60 bg-[#FAF6EC]/90 p-4 shadow-inner sm:p-6 min-h-[320px]">
                     <div className="w-full max-w-lg">
-                      {usingSignMt && signWriting.length > 0 ? (
-                        <SignWritingViewer tokens={signWriting} />
+                      {bergamotActive ? (
+                        <SignWritingViewer tokens={signWriting} className="signwriting-panel" />
                       ) : (
                         <AvatarPlayer
                           ref={avatarRef}

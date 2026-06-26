@@ -63,6 +63,7 @@ export async function loadSignWritingFonts() {
   if (fontsReady) return
   const font = await import('@sutton-signwriting/font-ttf/font/font.min')
   await new Promise((resolve) => font.cssAppend('/fonts/signwriting/', resolve))
+  await new Promise((resolve) => font.cssLoaded(resolve))
   fontsReady = true
 }
 

@@ -14,6 +14,16 @@ body,
   padding: 0;
 }
 
+/* SignWriting (Bergamot) — mismos estilos que translate */
+.signwriting-panel fsw-sign {
+  direction: ltr;
+  display: block;
+  margin: 16px 0;
+  font-size: 28px;
+  color: #2d2a26;
+  user-select: none;
+}
+
 body {
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
