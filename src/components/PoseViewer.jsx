@@ -39,7 +39,6 @@ async function freezeOnLastFrame(viewer) {
     viewer.currentTime = lastTime
     await viewer.pause()
   } catch {
-    // Mantener el último frame renderizado si es posible
     if (viewer.duration > 0) {
       viewer.currentTime = Math.max(0, viewer.duration - 0.001)
       await viewer.pause()
@@ -47,11 +46,21 @@ async function freezeOnLastFrame(viewer) {
   }
 }
 
-/** Animación 3D de lengua de señas (pose-viewer). */
+/**
+ * Animación 3D de lengua de señas (pose-viewer).
+ * El blob URL lo gestiona el padre (TranslationScreen); no revocar aquí
+ * (React Strict Mode revocaba antes de que pose-viewer hiciera fetch).
+ */
 export default function PoseViewer({ src, className = '', onError, onEnded }) {
   const hostRef = useRef(null)
-  const blobRef = useRef(null)
   const viewerRef = useRef(null)
+  const onErrorRef = useRef(onError)
+  const onEndedRef = useRef(onEnded)
+
+  useEffect(() => {
+    onErrorRef.current = onError
+    onEndedRef.current = onEnded
+  }, [onError, onEnded])
 
   useEffect(() => {
     if (!src) return
@@ -73,13 +82,13 @@ export default function PoseViewer({ src, className = '', onError, onEnded }) {
 
         const onEndedEvent = () => {
           freezeOnLastFrame(viewer).then(() => {
-            if (!cancelled) onEnded?.()
+            if (!cancelled) onEndedRef.current?.()
           })
         }
 
         viewer.addEventListener('error', (e) => {
           console.warn('[PoseViewer]', e?.detail || e)
-          onError?.(e?.detail || new Error('Error al cargar la animación 3D'))
+          onErrorRef.current?.(e?.detail || new Error('Error al cargar la animación 3D'))
         })
         viewer.addEventListener('ended$', onEndedEvent)
 
@@ -88,23 +97,13 @@ export default function PoseViewer({ src, className = '', onError, onEnded }) {
       })
       .catch((err) => {
         console.warn('[PoseViewer]', err?.message || err)
-        onError?.(err)
+        onErrorRef.current?.(err)
       })
 
     return () => {
       cancelled = true
       viewerRef.current = null
       if (hostRef.current) hostRef.current.innerHTML = ''
-    }
-  }, [src, onError, onEnded])
-
-  useEffect(() => {
-    if (src?.startsWith('blob:')) blobRef.current = src
-    return () => {
-      if (blobRef.current?.startsWith('blob:')) {
-        URL.revokeObjectURL(blobRef.current)
-        blobRef.current = null
-      }
     }
   }, [src])
 
