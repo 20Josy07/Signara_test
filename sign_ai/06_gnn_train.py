@@ -264,6 +264,7 @@ with open(META_PATH, "w", encoding="utf-8") as f:
         {
             "normalize_inputs": NORMALIZE_INPUTS,
             "best_val_acc": round(best_val_acc, 2),
+            "model_type": "GCN+LSTM",
             "classes": clases,
         },
         f,

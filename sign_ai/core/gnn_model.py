@@ -1,39 +1,24 @@
 """GAT + Transformer ligero con grafo manos + cara para LSC en tiempo real."""
 
-import os
-
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATConv, global_mean_pool
 
-HAND_LANDMARKS_PER_HAND = 21
-HAND_TOTAL_NODES = HAND_LANDMARKS_PER_HAND * 2
-
-# Subconjunto de la malla facial MediaPipe (468 puntos → ~46 clave)
-FACE_IDX_RAW = [
-    61, 146, 91, 181, 84, 17, 314, 405, 321, 375,
-    291, 409, 270, 269, 267, 0, 37, 39, 40, 185,
-    78, 95, 88, 178, 87, 14, 317, 402, 318, 324,
-    33, 133, 159, 145, 153, 154, 155, 246, 161,
-    160, 158, 157, 173, 144,
-    70, 63, 105, 66, 107, 55, 65, 52, 53, 46,
-]
-FACE_IDX = list(dict.fromkeys(FACE_IDX_RAW))
-FACE_TOTAL_NODES = len(FACE_IDX)
-
-N_NODES = HAND_TOTAL_NODES + FACE_TOTAL_NODES
-N_FEATURES = 4
-SEQ_LEN = 15
-
-NODE_TYPE_HAND_L = 0.0
-NODE_TYPE_HAND_R = 1.0
-NODE_TYPE_FACE = 2.0
-
-COMPACT_HAND_DIM = HAND_LANDMARKS_PER_HAND * 3 * 2
-COMPACT_FACE_DIM = FACE_TOTAL_NODES * 3
-COMPACT_DIM = COMPACT_HAND_DIM + COMPACT_FACE_DIM
+from core.sign_constants import (
+    COMPACT_DIM,
+    COMPACT_FACE_DIM,
+    COMPACT_HAND_DIM,
+    FACE_IDX,
+    FACE_TOTAL_NODES,
+    HAND_LANDMARKS_PER_HAND,
+    HAND_TOTAL_NODES,
+    N_FEATURES,
+    N_NODES,
+    SEQ_LEN,
+)
+from core.torch_util import compile_model
 
 HIDDEN_CH = 32
 OUT_CH = 32
@@ -189,14 +174,7 @@ def predict_proba(model, edge_index, gnn_seq, device=None, batch_index=None, seq
     return probs, order
 
 
-def compile_model(model):
-    if os.getenv("SIGNARA_COMPILE", "1") == "0":
-        return model
-    try:
-        return torch.compile(model)
-    except Exception as exc:
-        print(f"⚠  torch.compile no disponible: {exc}")
-        return model
+from core.torch_util import compile_model  # noqa: F401 — re-export para scripts de entrenamiento
 
 
 def get_model(num_classes=100, seq_len=SEQ_LEN, use_transformer=True, ctc=False):

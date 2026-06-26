@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from core.gnn_model import N_FEATURES
+from core.sign_constants import N_FEATURES
 
 LEGACY_N_NODES = 42
 LEGACY_SEQ_LEN = 30

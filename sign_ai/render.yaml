@@ -3,9 +3,15 @@ services:
     name: signara-test
     runtime: python
     rootDir: sign_ai
-    buildCommand: pip install -r requirements_api.txt
+    buildCommand: pip install -r requirements_api_render.txt
     startCommand: bash start.sh
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: SIGNARA_COMPILE
+        value: "0"
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: MKL_NUM_THREADS
+        value: "1"
     plan: free

@@ -1,31 +1,22 @@
 """
-Signara ML API — GAT + Transformer (optimizado para baja latencia)
+Signara ML API — inferencia GCN+LSTM o GAT+Transformer.
+Optimizado para Render free tier (512 MB RAM).
 """
 
+import gc
 import json
 import os
 from pathlib import Path
 
 import numpy as np
-import torch
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from core.gnn_model import (
-    COMPACT_DIM,
-    COMPACT_HAND_DIM,
-    N_NODES,
-    SEQ_LEN,
-    build_batch_index,
-    compile_model,
-    create_edge_index,
-    get_model,
-    predict_proba,
-)
-from core.gnn_legacy import GCN_LSTM, LEGACY_N_NODES, LEGACY_SEQ_LEN, predict_proba_legacy
 from core.confusion import evaluate_prediction
 from core.preprocess import sequence_compact_to_gnn
+from core.sign_constants import COMPACT_DIM, COMPACT_HAND_DIM, N_NODES, SEQ_LEN
+from core.torch_util import compile_model, detect_model_type, load_state_dict
 
 GNN_MODEL_PATH = "models/signara_gnn.pt"
 GNN_LABEL_PATH = "models/labels_gnn.json"
@@ -35,7 +26,7 @@ ANIM_DIR = Path(__file__).parent / "animations"
 UMBRAL_CONFIANZA = float(os.getenv("SIGNARA_UMBRAL", "0.80"))
 MARGEN_TOP2 = float(os.getenv("SIGNARA_MARGEN_TOP2", "0.16"))
 
-app = FastAPI(title="Signara ML API — GAT+Face", version="4.0.0")
+app = FastAPI(title="Signara ML API", version="4.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,10 +41,12 @@ _edge_index = None
 _batch_index = None
 _labels: list[str] = []
 _normalize_inputs = False
+_legacy_seq_len = 30
+_legacy_n_nodes = 42
 
 
 def _model_seq_len() -> int:
-    return LEGACY_SEQ_LEN if _model_type == "GCN+LSTM" else SEQ_LEN
+    return _legacy_seq_len if _model_type == "GCN+LSTM" else SEQ_LEN
 
 
 def _load_meta() -> dict:
@@ -68,7 +61,7 @@ def _prepare_frames(frames: list[list[float]]) -> np.ndarray:
     try:
         data = np.array(frames, dtype=np.float32)
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Frames inválidos: {exc}") from exc
+        raise HTTPException(status_code=422, detail=f"Frames invalidos: {exc}") from exc
 
     if data.ndim != 2:
         raise HTTPException(status_code=422, detail=f"Shape esperado (N, D), recibido {data.shape}.")
@@ -78,7 +71,7 @@ def _prepare_frames(frames: list[list[float]]) -> np.ndarray:
     if data.shape[1] not in allowed_dims:
         raise HTTPException(
             status_code=422,
-            detail=f"Dimensión esperada {allowed_dims}, recibido {data.shape[1]}.",
+            detail=f"Dimension esperada {allowed_dims}, recibido {data.shape[1]}.",
         )
 
     if legacy:
@@ -97,7 +90,7 @@ def _prepare_frames(frames: list[list[float]]) -> np.ndarray:
 
 
 def _predict_from_frames(frames: list[list[float]]) -> dict:
-    if _model is None or not _labels or _edge_index is None:
+    if _model is None or not _labels:
         raise HTTPException(status_code=503, detail="Modelo no disponible.")
 
     data = _prepare_frames(frames)
@@ -105,8 +98,12 @@ def _predict_from_frames(frames: list[list[float]]) -> dict:
     gnn_seq = sequence_compact_to_gnn(data, normalize=_normalize_inputs, hands_only=hands_only)
 
     if _model_type == "GAT+Transformer":
+        from core.gnn_model import predict_proba
+
         probs, _ = predict_proba(_model, _edge_index, gnn_seq, batch_index=_batch_index)
     else:
+        from core.gnn_legacy import predict_proba_legacy
+
         probs, _ = predict_proba_legacy(_model, gnn_seq)
 
     prediction, confidence, _margin = evaluate_prediction(
@@ -121,15 +118,44 @@ def _predict_from_frames(frames: list[list[float]]) -> dict:
     return {"prediction": prediction, "confidence": confidence, "is_idle": False}
 
 
-@app.on_event("startup")
-async def load_model():
-    global _model, _model_type, _edge_index, _batch_index, _labels, _normalize_inputs
+def _load_legacy_model(state: dict, n_classes: int):
+    global _model, _model_type, _edge_index, _batch_index, _legacy_seq_len, _legacy_n_nodes
+
+    from core.gnn_legacy import GCN_LSTM, LEGACY_N_NODES, LEGACY_SEQ_LEN
+
+    legacy_model = GCN_LSTM(n_classes=n_classes)
+    legacy_model.load_state_dict(state)
+    legacy_model.eval()
+    _model = compile_model(legacy_model)
+    _model_type = "GCN+LSTM"
+    _edge_index = None
+    _batch_index = None
+    _legacy_seq_len = LEGACY_SEQ_LEN
+    _legacy_n_nodes = LEGACY_N_NODES
+    print(f"Modelo GCN+LSTM cargado — clases: {_labels}")
+
+
+def _load_gat_model(state: dict, n_classes: int):
+    global _model, _model_type, _edge_index, _batch_index
+
+    from core.gnn_model import build_batch_index, create_edge_index, get_model
 
     _edge_index = create_edge_index()
     _batch_index = build_batch_index(1)
+    gat_model = get_model(num_classes=n_classes, seq_len=SEQ_LEN)
+    gat_model.load_state_dict(state)
+    gat_model.eval()
+    _model = compile_model(gat_model)
+    _model_type = "GAT+Transformer"
+    print(f"Modelo GAT+Transformer cargado — clases: {_labels}")
+
+
+@app.on_event("startup")
+async def load_model():
+    global _labels, _normalize_inputs
 
     if not os.path.exists(GNN_LABEL_PATH):
-        print(f"⚠  Labels no encontrados: {GNN_LABEL_PATH}")
+        print(f"Labels no encontrados: {GNN_LABEL_PATH}")
         return
 
     with open(GNN_LABEL_PATH, "r", encoding="utf-8") as f:
@@ -137,40 +163,39 @@ async def load_model():
 
     meta = _load_meta()
     _normalize_inputs = bool(meta.get("normalize_inputs", False))
+    hinted = meta.get("model_type")
 
     if not os.path.exists(GNN_MODEL_PATH):
-        print(f"⚠  Modelo GNN no encontrado: {GNN_MODEL_PATH}")
+        print(f"Modelo GNN no encontrado: {GNN_MODEL_PATH}")
         return
 
-    state = torch.load(GNN_MODEL_PATH, map_location="cpu")
-    if isinstance(state, dict) and "state_dict" in state:
-        state = state["state_dict"]
+    state = load_state_dict(GNN_MODEL_PATH)
+    model_type = detect_model_type(state, hinted)
 
-    gat_model = get_model(num_classes=len(_labels), seq_len=SEQ_LEN)
     try:
-        gat_model.load_state_dict(state)
-        gat_model.eval()
-        _model = compile_model(gat_model)
-        _model_type = "GAT+Transformer"
-        print(f"✅ Modelo GAT+Transformer cargado — clases: {_labels}")
+        if model_type == "GCN+LSTM":
+            _load_legacy_model(state, len(_labels))
+        else:
+            _load_gat_model(state, len(_labels))
     except Exception as exc:
-        print(f"⚠  Checkpoint no compatible con GAT ({exc}); probando GCN+LSTM…")
-        legacy_model = GCN_LSTM(n_classes=len(_labels))
-        try:
-            legacy_model.load_state_dict(state)
-            legacy_model.eval()
-            _model = compile_model(legacy_model)
-            _model_type = "GCN+LSTM"
-            print(f"✅ Modelo GCN+LSTM cargado — clases: {_labels}")
-        except Exception as legacy_exc:
-            print(f"⚠  No se pudo cargar el checkpoint: {legacy_exc}")
-            _model = None
-            _model_type = None
+        if model_type == "GAT+Transformer":
+            print(f"Checkpoint GAT fallo ({exc}); probando GCN+LSTM…")
+            try:
+                _load_legacy_model(state, len(_labels))
+            except Exception as legacy_exc:
+                print(f"No se pudo cargar el checkpoint: {legacy_exc}")
+                return
+        else:
+            print(f"No se pudo cargar el checkpoint: {exc}")
             return
+    finally:
+        del state
+        gc.collect()
 
+    n_nodes = _legacy_n_nodes if _model_type == "GCN+LSTM" else N_NODES
     print(
-        f"   SEQ_LEN={_model_seq_len()} | nodos={LEGACY_N_NODES if _model_type == 'GCN+LSTM' else N_NODES} | "
-        f"normalización={_normalize_inputs} | umbral={UMBRAL_CONFIANZA} | margen top2={MARGEN_TOP2}"
+        f"   tipo={_model_type} | SEQ_LEN={_model_seq_len()} | nodos={n_nodes} | "
+        f"normalizacion={_normalize_inputs} | umbral={UMBRAL_CONFIANZA}"
     )
 
 
@@ -193,7 +218,7 @@ def health():
         "labels": _labels,
         "seq_len": _model_seq_len() if _model else SEQ_LEN,
         "compact_dim": COMPACT_HAND_DIM if _model_type == "GCN+LSTM" else COMPACT_DIM,
-        "n_nodes": LEGACY_N_NODES if _model_type == "GCN+LSTM" else N_NODES,
+        "n_nodes": _legacy_n_nodes if _model_type == "GCN+LSTM" else N_NODES,
         "umbral_confianza": UMBRAL_CONFIANZA,
         "margen_top2": MARGEN_TOP2,
         "normalize_inputs": _normalize_inputs,
@@ -237,6 +262,6 @@ def get_sign_animation(token: str):
     token = token.upper()
     path = ANIM_DIR / f"{token}.json"
     if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Animación no encontrada: {token}")
+        raise HTTPException(status_code=404, detail=f"Animacion no encontrada: {token}")
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)

@@ -4,20 +4,19 @@ Preprocesado compartido entre entrenamiento, API y predicción en tiempo real.
 
 import numpy as np
 
-from core.gnn_model import (
+from core.sign_constants import (
     COMPACT_DIM,
     COMPACT_FACE_DIM,
     COMPACT_HAND_DIM,
     FACE_TOTAL_NODES,
     HAND_TOTAL_NODES,
+    LEGACY_HAND_NODES,
     N_FEATURES,
     N_NODES,
     NODE_TYPE_FACE,
     NODE_TYPE_HAND_L,
     NODE_TYPE_HAND_R,
 )
-
-LEGACY_HAND_NODES = 42
 MIN_HAND_SCALE = 0.05
 
 

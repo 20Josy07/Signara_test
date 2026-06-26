@@ -1,6 +1,7 @@
 {
   "normalize_inputs": true,
   "best_val_acc": 38.46,
+  "model_type": "GCN+LSTM",
   "classes": [
     "AMBULANCIA",
     "DOCTOR",
