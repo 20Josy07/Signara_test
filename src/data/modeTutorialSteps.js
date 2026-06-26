@@ -2,13 +2,13 @@ export const TRANSLATE_TUTORIAL_STEPS = [
   {
     target: null,
     title: 'Modo Traducir',
-    body: 'Convierte lo que escribes o dices en lengua de señas. Un avatar interpretará cada seña por ti.',
+    body: 'Convierte lo que escribes o dices en lengua de señas. Una animación 3D interpretará cada seña por ti.',
     emoji: '🤟',
   },
   {
     target: 'translate-input',
     title: 'Escribe o habla',
-    body: 'Elige la pestaña Escribir o Hablar. Con voz, el avatar señará palabra a palabra en tiempo real.',
+    body: 'Elige la pestaña Escribir o Hablar. Con voz, puedes dictar una frase completa y luego ver la seña.',
     emoji: '✍️',
   },
   {
@@ -18,16 +18,10 @@ export const TRANSLATE_TUTORIAL_STEPS = [
     emoji: '⚡',
   },
   {
-    target: 'translate-avatar',
+    target: null,
     title: 'Mira las señas aquí',
-    body: 'El avatar reproduce cada seña en orden. Arriba verás cuál está señando ahora.',
+    body: 'A la derecha verás la figura 3D firmando. Al terminar, la última pose queda visible.',
     emoji: '👀',
-  },
-  {
-    target: 'translate-picker',
-    title: 'Elige tu intérprete',
-    body: 'Puedes cambiar entre Alex, Anuar y Grace cuando quieras.',
-    emoji: '🧑',
   },
 ]
 

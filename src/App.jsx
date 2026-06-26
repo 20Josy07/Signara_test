@@ -4,8 +4,6 @@ import ModeSelection from './components/ModeSelection.jsx'
 import TranslationScreen from './components/TranslationScreen.jsx'
 import InterpretScreen from './components/InterpretScreen.jsx'
 import ScreenTransition from './components/ScreenTransition.jsx'
-import { setCurrentAvatar } from './utils/signMap.js'
-
 /**
  * App
  * Top-level state machine for the demo screens:
@@ -13,16 +11,12 @@ import { setCurrentAvatar } from './utils/signMap.js'
  *   landing  -> mode  -> translate
  *                     -> interpret
  *
- * 'translate'  : entrada texto/voz -> avatar de senas. El avatar se elige
- *                desde un modal en TranslationScreen (Alex / Anuar / Grace).
+ * 'translate'  : entrada texto/voz -> animación 3D de lengua de señas
  * 'interpret'  : camara -> reconocimiento de senas -> texto / audio
  *
- * El avatar elegido se persiste en localStorage. La pantalla activa se refleja
- * en el hash de la URL (#mode, #translate, #interpret) para conservarla al recargar.
+ * La pantalla activa se refleja en el hash de la URL (#mode, #translate, #interpret).
  */
 
-const AVATAR_KEY = 'signara:avatarId'
-const VALID_IDS = ['alex', 'anuar', 'grace']
 const VALID_SCREENS = ['landing', 'mode', 'translate', 'interpret']
 const SCREEN_DEPTH = { landing: 0, mode: 1, translate: 2, interpret: 2 }
 
@@ -31,20 +25,6 @@ function motionClassForTransition(from, to) {
   if (delta > 0) return 'animate-motion-enter-forward'
   if (delta < 0) return 'animate-motion-enter-back'
   return 'animate-motion-fade-through'
-}
-
-function readStoredAvatar() {
-  try {
-    const v = window.localStorage.getItem(AVATAR_KEY)
-    if (VALID_IDS.includes(v)) return v
-  } catch (_) {}
-  return 'alex'
-}
-
-function saveStoredAvatar(id) {
-  try {
-    window.localStorage.setItem(AVATAR_KEY, id)
-  } catch (_) {}
 }
 
 /** Pantalla actual desde el hash (#mode, #translate, #interpret). */
@@ -62,14 +42,7 @@ function syncLocation(screen) {
 
 export default function App() {
   const [screen, setScreen] = useState(screenFromLocation)
-  const [avatarId, setAvatarId] = useState('alex')
   const [motionClass, setMotionClass] = useState('animate-motion-enter')
-
-  useEffect(() => {
-    const stored = readStoredAvatar()
-    setAvatarId(stored)
-    setCurrentAvatar(stored)
-  }, [])
 
   useEffect(() => {
     const onNavigate = () => {
@@ -96,13 +69,6 @@ export default function App() {
     setScreen(next)
   }
 
-  const handleAvatarChange = (id) => {
-    if (!VALID_IDS.includes(id)) return
-    setAvatarId(id)
-    setCurrentAvatar(id)
-    saveStoredAvatar(id)
-  }
-
   return (
     <div className="min-h-screen w-full">
       <ScreenTransition
@@ -124,8 +90,6 @@ export default function App() {
             return (
               <TranslationScreen
                 initialMode="text"
-                avatarId={avatarId}
-                onAvatarChange={handleAvatarChange}
                 onBack={() => navigate('mode')}
                 onHome={() => navigate('landing')}
               />
