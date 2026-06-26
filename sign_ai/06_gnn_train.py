@@ -19,7 +19,8 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
-from core.gnn_model import GCN_LSTM, N_NODES, N_FEATURES, SEQ_LEN
+from core.gnn_legacy import GCN_LSTM, LEGACY_N_NODES as N_NODES, LEGACY_SEQ_LEN as SEQ_LEN
+from core.gnn_model import N_FEATURES
 from core.preprocess import normalize_sequence
 
 # ─── Config ───────────────────────────────────────────────────────────────────
@@ -35,7 +36,7 @@ MODEL_PATH       = "models/signara_gnn.pt"
 LABEL_PATH       = "models/labels_gnn.json"
 META_PATH        = "models/signara_gnn_meta.json"
 
-print(f"⚙  Dispositivo: {DEVICE}")
+print(f"Dispositivo: {DEVICE}")
 
 # ─── Dataset ──────────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ def load_raw_csvs():
     dfs = []
     for a in archivos:
         df = pd.read_csv(a)
-        print(f"  📂 {a}: {len(df)} filas")
+        print(f"  {a}: {len(df)} filas")
         dfs.append(df)
     return pd.concat(dfs, ignore_index=True)
 
@@ -115,7 +116,7 @@ class SignGraphDataset(Dataset):
 
 # ─── Cargar datos ─────────────────────────────────────────────────────────────
 
-print("\n📂 Cargando datasets raw...")
+print("\nCargando datasets raw...")
 df = load_raw_csvs()
 
 df["frame"]   = df["frame"].astype(int)
@@ -123,8 +124,8 @@ df["muestra"] = df["muestra"].astype(int)
 df["id"]      = df["id"].astype(int)
 df["mano"]    = df["mano"].astype(int)
 
-print(f"\n🧠 Clases detectadas: {sorted(df['label'].unique())}")
-print(f"📊 Total muestras: {df.groupby(['label','muestra']).ngroups}")
+print(f"\nClases detectadas: {sorted(df['label'].unique())}")
+print(f"Total muestras: {df.groupby(['label','muestra']).ngroups}")
 
 le = LabelEncoder()
 le.fit(df["label"].unique())
@@ -146,7 +147,7 @@ for i, ((label, persona, muestra_id), group) in enumerate(grupos):
     if (i + 1) % 50 == 0 or (i + 1) == total:
         print(f"  Procesados {i+1}/{total} samples...")
 
-print(f"\n✅ {len(samples_X)} samples listos")
+print(f"\n{len(samples_X)} samples listos")
 
 # ─── Augmentación train ───────────────────────────────────────────────────────
 
@@ -171,14 +172,14 @@ test_ds  = SignGraphDataset(X_test,  y_test)
 train_dl = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True,  drop_last=False)
 test_dl  = DataLoader(test_ds,  batch_size=BATCH_SIZE, shuffle=False, drop_last=False)
 
-print(f"📦 Train: {len(train_ds)} | Test: {len(test_ds)}")
+print(f"Train: {len(train_ds)} | Test: {len(test_ds)}")
 
 # ─── Modelo ───────────────────────────────────────────────────────────────────
 
 model = GCN_LSTM(n_classes=len(clases)).to(DEVICE)
 
 total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-print(f"\n🧠 Modelo: GCN + LSTM")
+print(f"\nModelo: GCN + LSTM")
 print(f"   Clases        : {clases}")
 print(f"   Parámetros    : {total_params:,}")
 
@@ -195,7 +196,7 @@ criterion = nn.CrossEntropyLoss(weight=weight_tensor)
 
 # ─── Entrenamiento ────────────────────────────────────────────────────────────
 
-print(f"\n🚀 Iniciando entrenamiento ({EPOCHS} épocas)...")
+print(f"\nIniciando entrenamiento ({EPOCHS} epocas)...")
 print(f"   Normalización: {NORMALIZE_INPUTS} | Augment x{AUGMENT_COPIES + 1} train\n")
 
 best_val_acc = 0.0
@@ -235,7 +236,7 @@ for epoch in range(1, EPOCHS + 1):
     v_acc = val_correct / len(test_ds) * 100
     scheduler.step(v_acc)
 
-    marker = " ⭐" if v_acc > best_val_acc else ""
+    marker = " *" if v_acc > best_val_acc else ""
     if v_acc > best_val_acc:
         best_val_acc = v_acc
         epochs_no_improve = 0
@@ -249,7 +250,7 @@ for epoch in range(1, EPOCHS + 1):
               f"train {t_acc:.1f}% | val {v_acc:.1f}%{marker}")
 
     if epochs_no_improve >= PATIENCE:
-        print(f"\n⏹  Early stopping en epoch {epoch} (sin mejora {PATIENCE} épocas)")
+        print(f"\nEarly stopping en epoch {epoch} (sin mejora {PATIENCE} epocas)")
         break
 
 # ─── Guardar labels ───────────────────────────────────────────────────────────
@@ -270,8 +271,8 @@ with open(META_PATH, "w", encoding="utf-8") as f:
         indent=2,
     )
 
-print(f"\n✅ ENTRENAMIENTO COMPLETADO")
+print(f"\nENTRENAMIENTO COMPLETADO")
 print(f"   Mejor val acc : {best_val_acc:.1f}%")
-print(f"   Modelo        → {MODEL_PATH}")
-print(f"   Labels        → {LABEL_PATH}")
-print(f"   Meta          → {META_PATH}")
+print(f"   Modelo        -> {MODEL_PATH}")
+print(f"   Labels        -> {LABEL_PATH}")
+print(f"   Meta          -> {META_PATH}")

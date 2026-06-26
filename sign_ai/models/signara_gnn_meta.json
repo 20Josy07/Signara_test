@@ -1,0 +1,11 @@
+{
+  "normalize_inputs": true,
+  "best_val_acc": 38.46,
+  "classes": [
+    "AMBULANCIA",
+    "DOCTOR",
+    "DOLOR",
+    "HOY",
+    "YO"
+  ]
+}

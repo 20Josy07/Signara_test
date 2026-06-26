@@ -28,16 +28,34 @@ cd sign_ai
 py -3.11 -m venv venv
 venv\Scripts\activate
 pip install -r requirements_api.txt
-uvicorn api:app --port 8000
+uvicorn api:app --port 8080
 ```
 
 En `.env` del frontend (opcional si usas el default local):
 
 ```
-VITE_ML_API_URL=http://localhost:8000
+VITE_ML_API_URL=http://localhost:8080
 ```
 
-El modelo actual reconoce **7 señas** (`sign_ai/models/labels_gnn.json`). Para ampliar vocabulario, reentrena con `06_gnn_train.py` y un dataset más grande.
+El modelo actual reconoce **7 señas** (`sign_ai/models/labels_gnn.json`). Para ampliar a **150+ señas LSM** con MSL-150:
+
+```bash
+# 1. Clonar subset demo (o descargar CSV completo de Zenodo)
+git clone --depth 1 https://github.com/armandobecerril/MSL-150-Dataset ../MSL-150-Dataset
+
+# 2. Importar al formato sign_ai
+cd sign_ai
+python 08_import_msl150.py --npy-dir ../MSL-150-Dataset/data/sample_npy
+
+# 3. Entrenar GNN (30 frames, solo manos)
+python 06_gnn_train.py
+
+# 4. Reiniciar API
+uvicorn api:app --port 8080
+```
+
+Dataset completo (~14 GB): [Zenodo MSL-150](https://doi.org/10.5281/zenodo.17783312)  
+`python 08_import_msl150.py --csv ruta/al/MSL-150_Mexican_Sign_Language_Dataset.csv`
 
 ---
 
@@ -48,7 +66,7 @@ npm install
 npm run dev           # http://localhost:5173
 ```
 
-En otra terminal, levanta la API de reconocimiento (`sign_ai`, puerto 8000).
+En otra terminal, levanta la API de reconocimiento (`sign_ai`, puerto 8080).
 
 ---
 

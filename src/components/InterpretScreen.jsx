@@ -25,19 +25,19 @@ const MP_SCRIPTS = [
   `https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@${MEDIAPIPE_DRAW_VER}/drawing_utils.js`,
 ]
 
-// ÔöÇÔöÇ Par├ímetros de reconocimiento en tiempo real ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ── Parámetros de reconocimiento en tiempo real ───────────────────────────────
 const DEFAULT_SEQ_LEN      = 15
 const HAND_COUNT           = 21
 const UMBRAL               = 0.80
-const UMBRAL_HIGH          = 0.88   // confianza alta ÔåÆ menos repeticiones necesarias
+const UMBRAL_HIGH          = 0.88   // confianza alta → menos repeticiones necesarias
 const STABILITY_NEED       = 2      // ventanas consecutivas iguales (normal)
-const STABILITY_NEED_FAST  = 1      // con confianza ÔëÑ UMBRAL_HIGH
+const STABILITY_NEED_FAST  = 1      // con confianza ≥ UMBRAL_HIGH
 const NO_HAND_RESET        = 20
 const SAME_SIGN_WAIT       = 20
-const MIN_FRAMES_TO_PREDICT = 4     // m├¡nimo de frames reales antes de la 1┬¬ inferencia
-const PREDICT_COOLDOWN_MS  = 80     // ventana deslizante: inferir ~12├ù/s
+const MIN_FRAMES_TO_PREDICT = 4     // mínimo de frames reales antes de la 1ª inferencia
+const PREDICT_COOLDOWN_MS  = 80     // ventana deslizante: inferir ~12×/s
 
-// ÔöÇÔöÇ Script loader ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ── Script loader ─────────────────────────────────────────────────────────────
 
 function loadScript(url) {
   return new Promise((resolve, reject) => {
@@ -61,17 +61,17 @@ async function loadMediaPipe() {
   for (const url of MP_SCRIPTS) await loadScript(url)
 }
 
-// ÔöÇÔöÇ Extracci├│n de landmarks ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ── Extracción de landmarks ───────────────────────────────────────────────────
 //
-// CORRECCI├ôN DE ESPEJO:
-// Python hace cv2.flip(frame,1) ANTES de MediaPipe ÔåÆ landmarks tienen x espejado.
+// CORRECCIÓN DE ESPEJO:
+// Python hace cv2.flip(frame,1) ANTES de MediaPipe → landmarks tienen x espejado.
 // El navegador pasa el frame crudo (sin flip) a MediaPipe.
-// Fix: x = 1 - x  +  swap leftÔåöright (en frame crudo, la mano derecha anat├│mica
-// aparece a la izquierda ÔåÆ leftHandLandmarks; en frame flipado aparece a la derecha
-// ÔåÆ right_hand_landmarks).
+// Fix: x = 1 - x  +  swap left↔right (en frame crudo, la mano derecha anatómica
+// aparece a la izquierda → leftHandLandmarks; en frame flipado aparece a la derecha
+// → right_hand_landmarks).
 //
-// Resultado: slot lh (primeros 63) = mano izquierda anat├│mica de la persona
-//            slot rh (├║ltimos 63)  = mano derecha anat├│mica de la persona
+// Resultado: slot lh (primeros 63) = mano izquierda anatómica de la persona
+//            slot rh (últimos 63)  = mano derecha anatómica de la persona
 // Igual que en el entrenamiento.
 
 function extractLandmarks(results) {
@@ -119,7 +119,7 @@ function padBuffer(buffer, seqLen) {
   return padded.slice(-seqLen)
 }
 
-// ÔöÇÔöÇ Componente principal ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ── Componente principal ──────────────────────────────────────────────────────
 
 export default function InterpretScreen({ onBack, onHome }) {
   const videoRef     = useRef(null)
@@ -138,7 +138,7 @@ export default function InterpretScreen({ onBack, onHome }) {
   const predHistRef       = useRef([])
   const noHandCountRef    = useRef(0)
   const cooldownRef       = useRef(0)    // cooldown frame-based
-  const lastSignRef       = useRef('')   // ├║ltima se├▒a confirmada (evita repetir)
+  const lastSignRef       = useRef('')   // última seña confirmada (evita repetir)
   const apiInFlightRef    = useRef(false)
   const lastPredictAtRef  = useRef(0)
   const mlAvailableRef    = useRef(false)
@@ -170,7 +170,7 @@ export default function InterpretScreen({ onBack, onHome }) {
   useEffect(() => { runningRef.current = running }, [running])
   useEffect(() => { audioRef.current   = audioOn  }, [audioOn])
 
-  // ÔöÇÔöÇ Verificar API ML ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Verificar API ML ───────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false
     const cached = getMlApiCache()
@@ -209,7 +209,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     return () => { cancelled = true }
   }, [])
 
-  // ÔöÇÔöÇ WebSocket ML (menor latencia que HTTP por frame) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── WebSocket ML (menor latencia que HTTP por frame) ─────────────────────
   useEffect(() => {
     if (!mlMode) {
       mlSocketRef.current?.close()
@@ -237,7 +237,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     return () => socket.close()
   }, [mlMode])
 
-  // ÔöÇÔöÇ Cargar MediaPipe ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Cargar MediaPipe ───────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false
     loadMediaPipe()
@@ -246,13 +246,13 @@ export default function InterpretScreen({ onBack, onHome }) {
     return () => { cancelled = true }
   }, [])
 
-  // ÔöÇÔöÇ Inicializar Holistic + c├ímara (solo tras consentimiento del usuario) ÔöÇÔöÇÔöÇ
+  // ── Inicializar Holistic + cámara (solo tras consentimiento del usuario) ───
   useEffect(() => {
     if (!scriptsLoaded || cameraConsent !== 'accepted') return
     const HolisticCtor = window.Holistic
     const CameraCtor   = window.Camera
     if (!HolisticCtor || !CameraCtor) {
-      setScriptsError('MediaPipe no se carg├│ correctamente.')
+      setScriptsError('MediaPipe no se cargó correctamente.')
       return
     }
     const videoEl = videoRef.current
@@ -287,8 +287,8 @@ export default function InterpretScreen({ onBack, onHome }) {
       .then(() => setCameraOk(true))
       .catch(e => setCameraError(
         e?.name === 'NotAllowedError'
-          ? 'Permiso de c├ímara denegado. Habil├¡talo en tu navegador.'
-          : 'No se pudo acceder a la c├ímara.'
+          ? 'Permiso de cámara denegado. Habilítalo en tu navegador.'
+          : 'No se pudo acceder a la cámara.'
       ))
 
     return () => {
@@ -320,7 +320,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     setCameraRetryKey((k) => k + 1)
   }
 
-  // ÔöÇÔöÇ Voz ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Voz ───────────────────────────────────────────────────────────────────
   function speak(text) {
     if (!audioRef.current || !text) return
     if (!window?.speechSynthesis) return
@@ -332,7 +332,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     } catch (e) { console.warn(e) }
   }
 
-  // ÔöÇÔöÇ Confirmar se├▒a ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Confirmar seña ────────────────────────────────────────────────────────
   function triggerRecognition(sign, confidence) {
     const text = sign.replace(/_/g, ' ')
     const det  = { sign, text, confidence }
@@ -344,7 +344,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     speak(text)
   }
 
-  // ÔöÇÔöÇ Callback principal de MediaPipe ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Callback principal de MediaPipe ───────────────────────────────────────
   function handleResults(results) {
     const canvas = canvasRef.current
     const video  = videoRef.current
@@ -360,7 +360,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     const hasRight = !!results.rightHandLandmarks
     const hasHands = hasLeft || hasRight
 
-    // ÔöÇÔöÇ Solo dibuja manos (igual que 07_gnn_predict.py) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    // ── Solo dibuja manos (igual que 07_gnn_predict.py) ─────────────────────
     if (window.drawConnectors && window.drawLandmarks) {
       if (hasLeft) {
         window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS,
@@ -386,7 +386,7 @@ export default function InterpretScreen({ onBack, onHome }) {
       setInCooldown(cooldownRef.current > 0)
     }
 
-    // ÔöÇÔöÇ Sin manos ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    // ── Sin manos ────────────────────────────────────────────────────────────
     if (!hasHands) {
       noHandCountRef.current++
       if (noHandCountRef.current >= NO_HAND_RESET) {
@@ -404,7 +404,7 @@ export default function InterpretScreen({ onBack, onHome }) {
       return
     }
 
-    // ÔöÇÔöÇ Con manos ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    // ── Con manos ────────────────────────────────────────────────────────────
     noHandCountRef.current = 0
 
     const currFrame = extractLandmarks(results)
@@ -420,7 +420,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     const activeSeqLen = seqLenRef.current
     setBufferLen(n)
 
-    // ÔöÇÔöÇ Inferencia con ventana deslizante (no esperar a llenar SEQ_LEN) ÔöÇÔöÇÔöÇÔöÇÔöÇ
+    // ── Inferencia con ventana deslizante (no esperar a llenar SEQ_LEN) ─────
     if (
       runningRef.current        &&
       mlAvailableRef.current    &&
@@ -500,7 +500,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     }
   }
 
-  // ÔöÇÔöÇ Controles ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Controles ─────────────────────────────────────────────────────────────
   function startDetect() {
     landmarkBufferRef.current = []
     predHistRef.current       = []
@@ -552,19 +552,19 @@ export default function InterpretScreen({ onBack, onHome }) {
       })
   }
 
-  // ÔöÇÔöÇ Status HUD ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Status HUD ────────────────────────────────────────────────────────────
   const statusLabel = (() => {
     if (cameraConsent === null)    return 'Permiso requerido'
-    if (cameraConsent === 'declined') return 'C├ímara desactivada'
-    if (!cameraOk && cameraError)  return 'Sin acceso a c├ímara'
-    if (!running)                  return cameraOk ? 'Listo' : 'ConectandoÔÇª'
-    if (!mlMode)                   return 'ÔÜá Servidor IA no conectado'
+    if (cameraConsent === 'declined') return 'Cámara desactivada'
+    if (!cameraOk && cameraError)  return 'Sin acceso a cámara'
+    if (!running)                  return cameraOk ? 'Listo' : 'Conectando…'
+    if (!mlMode)                   return '⚠ Servidor IA no conectado'
     if (!handVisible)              return 'Muestra una mano'
-    if (displaySign && inCooldown) return `${displaySign.replace(/_/g, ' ')} ┬À ${Math.round(displayConf * 100)}%`
-    if (liveConf >= UMBRAL)        return `ReconociendoÔÇª ${Math.round(liveConf * 100)}%`
-    if (bufferLen >= MIN_FRAMES_TO_PREDICT) return `AnalizandoÔÇª ${Math.round(liveConf * 100)}%`
-    if (bufferLen > 0)             return 'Capturando se├▒aÔÇª'
-    return 'Haz la se├▒a'
+    if (displaySign && inCooldown) return `${displaySign.replace(/_/g, ' ')} · ${Math.round(displayConf * 100)}%`
+    if (liveConf >= UMBRAL)        return `Reconociendo… ${Math.round(liveConf * 100)}%`
+    if (bufferLen >= MIN_FRAMES_TO_PREDICT) return `Analizando… ${Math.round(liveConf * 100)}%`
+    if (bufferLen > 0)             return 'Capturando seña…'
+    return 'Haz la seña'
   })()
 
   const bufferProgress = running && mlMode && handVisible && !inCooldown
@@ -608,13 +608,13 @@ export default function InterpretScreen({ onBack, onHome }) {
               <div>
                 <SectionLabel color="blue">Interpretar</SectionLabel>
                 <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
-                  De se├▒as a{' '}
+                  De señas a{' '}
                   <span className="inline-block rounded-xl border-2 border-pastel-blue-line bg-pastel-blue px-2.5 py-0.5 shadow-[0_8px_18px_-8px_rgba(45,42,38,0.35)]">
                     texto
                   </span>
                 </h1>
                 <p className="mt-3 max-w-lg text-sm font-semibold text-pastel-sub sm:text-base">
-                  Muestra tus manos a la c├ímara y Signara las convertir├í en palabras.
+                  Muestra tus manos a la cámara y Signara las convertirá en palabras.
                 </p>
               </div>
 
@@ -655,7 +655,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-ink/70">
-                          ­ƒôÀ Tu c├ímara
+                          📷 Tu cámara
                         </p>
                         <p className="mt-0.5 text-lg font-extrabold text-pastel-ink">{statusLabel}</p>
                       </div>
@@ -673,7 +673,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                               />
                             </div>
                             <span className="text-xs font-bold tabular-nums text-pastel-ink">
-                              {liveConf > 0 ? `${Math.round(liveConf * 100)}%` : 'ÔÇª'}
+                              {liveConf > 0 ? `${Math.round(liveConf * 100)}%` : '…'}
                             </span>
                           </div>
                         </div>
@@ -690,18 +690,18 @@ export default function InterpretScreen({ onBack, onHome }) {
                       style={{ transform: 'scaleX(-1)' }} />
 
                     {!scriptsLoaded && !scriptsError && (
-                      <CameraOverlay icon="ÔÅ│" title="Cargando MediaPipeÔÇª" />
+                      <CameraOverlay icon="⏳" title="Cargando MediaPipe…" />
                     )}
                     {scriptsError && (
-                      <CameraOverlay icon="ÔÜá´©Å" title="Error cargando MediaPipe" subtitle={scriptsError} />
+                      <CameraOverlay icon="⚠️" title="Error cargando MediaPipe" subtitle={scriptsError} />
                     )}
                     {scriptsLoaded && cameraConsent === 'accepted' && !cameraOk && !cameraError && (
-                      <CameraOverlay icon="­ƒôÀ" title="Conectando c├ímaraÔÇª" />
+                      <CameraOverlay icon="📷" title="Conectando cámara…" />
                     )}
                     {cameraError && (
                       <CameraOverlay
-                        icon="­ƒÜ½"
-                        title="No se pudo iniciar la c├ímara"
+                        icon="🚫"
+                        title="No se pudo iniciar la cámara"
                         subtitle={cameraError}
                         actionLabel="Reintentar"
                         onAction={retryCameraAccess}
@@ -711,17 +711,17 @@ export default function InterpretScreen({ onBack, onHome }) {
                     {running && !mlMode && !mlConnecting && (
                       <div className="absolute inset-0 flex items-center justify-center bg-pastel-ink/75 p-6 backdrop-blur-sm">
                         <div className="max-w-sm rounded-2xl border-2 border-pastel-blue-line bg-[#FAF6EC] p-5 text-center shadow-xl">
-                          <p className="text-3xl">ÔÜá´©Å</p>
+                          <p className="text-3xl">⚠️</p>
                           <p className="mt-2 text-lg font-extrabold text-pastel-ink">Servidor IA no conectado</p>
                           <p className="mt-1 text-xs font-semibold text-pastel-sub">Ejecuta en una terminal:</p>
                           <code className="mt-3 block rounded-xl border-2 border-pastel-ink/10 bg-white px-3 py-2 text-left text-[11px] font-mono text-pastel-grape">
-                            cd sign_ai &amp;&amp; uvicorn api:app --port 8000
+                            cd sign_ai &amp;&amp; uvicorn api:app --port 8080
                           </code>
                           <button
                             onClick={retryMlConnection}
                             className="mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white transition hover:brightness-110"
                           >
-                            Reintentar conexi├│n
+                            Reintentar conexión
                           </button>
                         </div>
                       </div>
@@ -738,7 +738,7 @@ export default function InterpretScreen({ onBack, onHome }) {
 
                     <div className="absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-xl border-2 border-white/20 bg-black/50 px-2.5 py-1.5 text-xs font-bold text-white backdrop-blur">
                       <span className={'h-2 w-2 rounded-full ' + (running ? 'bg-red-400 animate-pulse' : cameraOk ? 'bg-green-400' : 'bg-white/50')} />
-                      {running ? 'REC' : cameraOk ? 'Lista' : 'ÔÇª'}
+                      {running ? 'REC' : cameraOk ? 'Lista' : '…'}
                     </div>
                   </div>
 
@@ -750,9 +750,9 @@ export default function InterpretScreen({ onBack, onHome }) {
                   )}
                   {scriptsLoaded && cameraConsent === 'declined' && !cameraOk && (
                     <CameraOverlay
-                      icon="­ƒôÀ"
-                      title="C├ímara no activada"
-                      subtitle="Sin permiso de c├ímara no podemos interpretar tus se├▒as. Puedes concederlo cuando quieras."
+                      icon="📷"
+                      title="Cámara no activada"
+                      subtitle="Sin permiso de cámara no podemos interpretar tus señas. Puedes concederlo cuando quieras."
                       actionLabel="Conceder permisos"
                       onAction={acceptCameraPermission}
                     />
@@ -786,13 +786,13 @@ export default function InterpretScreen({ onBack, onHome }) {
                         onChange={(e) => setAudioOn(e.target.checked)}
                         className="h-4 w-4 accent-pastel-grape"
                       />
-                      ­ƒöè Voz alta
+                      🔊 Voz alta
                     </label>
                   </div>
                 </div>
 
                 {sentence.length > 0 && (
-                  <OutputCard title="Conversaci├│n" emptyIcon="­ƒÆ¼" hasContent>
+                  <OutputCard title="Conversación" emptyIcon="💬" hasContent>
                     <p className="text-xl font-extrabold leading-relaxed tracking-wide text-pastel-ink sm:text-2xl">
                       {sentence.map((s) => s.replace(/_/g, ' ')).join(' ')}
                     </p>
@@ -802,7 +802,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                 {!running && !history.length && (
                   <div className="rounded-2xl border-2 border-dashed border-pastel-blue-line bg-pastel-blue/40 px-4 py-4 text-center">
                     <p className="text-sm font-bold text-pastel-ink">
-                      Pulsa <strong className="text-pastel-grape">Empezar a interpretar</strong> y mant├®n cada se├▒a unos segundos, clara y estable, antes de cambiar.
+                      Pulsa <strong className="text-pastel-grape">Empezar a interpretar</strong> y mantén cada seña unos segundos, clara y estable, antes de cambiar.
                     </p>
                   </div>
                 )}
@@ -813,7 +813,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                   data-tutorial="interpret-results"
                   className="motion-surface animate-motion-scale-in rounded-[1.5rem] border-[3px] border-pastel-blue-line bg-white p-5 shadow-[0_16px_36px_-22px_rgba(45,42,38,0.35)] sm:p-6"
                 >
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">├Ültima se├▒a</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">Última seña</p>
                   {latest ? (
                     <>
                       <p className="mt-3 text-4xl font-extrabold uppercase tracking-tight text-pastel-grape sm:text-5xl">
@@ -834,9 +834,9 @@ export default function InterpretScreen({ onBack, onHome }) {
                     </>
                   ) : (
                     <div className="mt-4 flex flex-col items-center rounded-xl border-2 border-dashed border-pastel-ink/10 bg-pastel-cream/50 px-4 py-8 text-center">
-                      <span className="text-4xl opacity-50">­ƒñƒ</span>
+                      <span className="text-4xl opacity-50">🤟</span>
                       <p className="mt-2 text-sm font-semibold text-pastel-sub">
-                        Aqu├¡ aparecer├í la se├▒a reconocida
+                        Aquí aparecerá la seña reconocida
                       </p>
                     </div>
                   )}
@@ -846,9 +846,9 @@ export default function InterpretScreen({ onBack, onHome }) {
                 <div data-tutorial="interpret-history">
                 <OutputCard
                   title="Historial reciente"
-                  emptyIcon="­ƒôï"
+                  emptyIcon="📋"
                   hasContent={history.length > 0}
-                  empty="Cada se├▒a reconocida aparecer├í aqu├¡."
+                  empty="Cada seña reconocida aparecerá aquí."
                 >
                   <ul className="space-y-2">
                     {history.map((h, i) => (
@@ -872,7 +872,7 @@ export default function InterpretScreen({ onBack, onHome }) {
       </AppPageMain>
 
       <AppPageFooter>
-        <p className="text-xs text-pastel-sub">GNN + LSTM ┬À solo manos ┬À MediaPipe Holistic</p>
+        <p className="text-xs text-pastel-sub">GNN + LSTM · solo manos · MediaPipe Holistic</p>
       </AppPageFooter>
 
       <ModeTutorial
@@ -899,7 +899,7 @@ function StatusPill({ variant, children }) {
 
 function MlStatusPill({ mlMode, mlConnecting, onRetry }) {
   const connected = mlMode && !mlConnecting
-  const label = mlConnecting ? 'Conectando IAÔÇª' : mlMode ? 'IA conectada' : 'Sin conexi├│n IA'
+  const label = mlConnecting ? 'Conectando IA…' : mlMode ? 'IA conectada' : 'Sin conexión IA'
   return (
     <button
       type="button"
@@ -913,7 +913,7 @@ function MlStatusPill({ mlMode, mlConnecting, onRetry }) {
             ? 'border-pastel-yellow-line bg-pastel-yellow text-pastel-ink cursor-default'
             : 'border-pastel-pink/50 bg-white text-pastel-sub hover:border-pastel-purple-line cursor-pointer')
       }
-      title={onRetry ? 'Reintentar conexi├│n con IA' : undefined}
+      title={onRetry ? 'Reintentar conexión con IA' : undefined}
     >
       <span className={`h-2 w-2 rounded-full ${
         mlConnecting ? 'bg-pastel-yellow-line animate-pulse' :
@@ -949,17 +949,17 @@ function CameraPermissionPrompt({ onAccept, onDecline }) {
           style={{ animationDuration: '3.5s' }}
           aria-hidden="true"
         >
-          ­ƒôÀ
+          📷
         </p>
         <p className="animate-permission-item-in mt-2 text-base font-extrabold text-pastel-ink sm:text-lg">
-          Necesitamos tu c├ímara
+          Necesitamos tu cámara
         </p>
         <p
           className="animate-permission-item-in mt-2 text-xs leading-relaxed text-pastel-sub sm:text-sm"
           style={{ animationDelay: '80ms' }}
         >
-          Para interpretar lengua de se├▒as, Signara necesita acceso a la c├ímara de tu dispositivo.
-          Si no concedes el permiso, esta funci├│n no estar├í disponible.
+          Para interpretar lengua de señas, Signara necesita acceso a la cámara de tu dispositivo.
+          Si no concedes el permiso, esta función no estará disponible.
         </p>
         <div
           className="animate-permission-item-in mt-4 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:justify-center"

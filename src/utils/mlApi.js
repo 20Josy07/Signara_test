@@ -4,7 +4,7 @@ export const ML_API_URL =
   import.meta.env.VITE_ML_API_URL ||
   (import.meta.env.PROD
     ? 'https://signara-test.onrender.com'
-    : 'http://localhost:8000')
+    : 'http://localhost:8080')
 
 export const ML_WS_URL = ML_API_URL.replace(/^http/, 'ws') + '/ws/predict'
 
