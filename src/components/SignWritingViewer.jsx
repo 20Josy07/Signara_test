@@ -1,24 +1,39 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadSignWritingFonts } from '../utils/signWritingFonts.js'
 
-let sgnwDefined = false
-let sgnwDefinePromise = null
+let sgnwLoaded = false
+let sgnwLoadPromise = null
+
+function loadSgnwScript() {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector('script[data-signara-sgnw]')) {
+      resolve()
+      return
+    }
+    const s = document.createElement('script')
+    s.type = 'module'
+    s.src = '/sgnw/esm/sgnw-components.js'
+    s.dataset.signaraSgnw = 'true'
+    s.onload = () => resolve()
+    s.onerror = () => reject(new Error('no se pudo cargar /sgnw/esm/sgnw-components.js'))
+    document.head.appendChild(s)
+  })
+}
 
 async function ensureSgnwComponents() {
-  await loadSignWritingFonts()
-  if (sgnwDefined) return
-  if (!sgnwDefinePromise) {
-    sgnwDefinePromise = import('@sutton-signwriting/sgnw-components/loader')
-      .then(({ defineCustomElements }) => {
-        defineCustomElements()
-        sgnwDefined = true
-      })
-      .catch((err) => {
-        sgnwDefinePromise = null
-        throw err
-      })
-  }
-  return sgnwDefinePromise
+  if (sgnwLoaded) return
+  if (sgnwLoadPromise) return sgnwLoadPromise
+
+  sgnwLoadPromise = (async () => {
+    await loadSignWritingFonts()
+    await loadSgnwScript()
+    sgnwLoaded = true
+  })().catch((err) => {
+    sgnwLoadPromise = null
+    throw err
+  })
+
+  return sgnwLoadPromise
 }
 
 function mountTokens(container, tokens) {
@@ -48,15 +63,12 @@ export default function SignWritingViewer({ tokens = [], className = '' }) {
       await ensureSgnwComponents()
       if (cancelled) return
 
-      // Esperar a que el ref del DOM exista (Strict Mode / primer paint)
       for (let i = 0; i < 20 && !ref.current; i++) {
         await new Promise((r) => requestAnimationFrame(r))
       }
 
       const el = ref.current
-      if (!el) {
-        throw new Error('contenedor SignWriting no disponible')
-      }
+      if (!el) throw new Error('contenedor SignWriting no disponible')
 
       mountTokens(el, tokens)
       if (!cancelled) setStatus('ready')
@@ -82,7 +94,7 @@ export default function SignWritingViewer({ tokens = [], className = '' }) {
       )}
       {status === 'error' && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-center text-sm font-semibold text-amber-900">
-          No se pudieron dibujar los símbolos. Recarga la página o prueba otro navegador.
+          No se pudieron dibujar los símbolos. Ejecuta <code className="font-mono">npm run build</code> o recarga.
         </p>
       )}
       <div

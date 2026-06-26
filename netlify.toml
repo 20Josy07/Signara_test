@@ -2,11 +2,18 @@
   command = "npm run build"
   publish = "dist"
 
-# SPA con rutas hash (#translate) — evitar 404 en recargas
+# Solo SPA fallback para rutas sin archivo (no pisa /assets ni /sgnw)
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+  force = false
+
+[[headers]]
+  for = "/sgnw/esm/*.js"
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=31536000, immutable"
 
 [[headers]]
   for = "/*.wasm"
