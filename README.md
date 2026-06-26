@@ -15,12 +15,29 @@ Signara es tu app. Puede reutilizar modelos del proyecto open source [Sign Trans
 
 No necesitas cuenta ni proyecto Firebase de sign.mt.
 
-### Interpretar (cámara → señas) — local + opcional tu API
-1. **MediaPipe** detecta manos
-2. **Modelos TF.js** locales generan **SignWriting** (símbolos de la seña)
-3. **Texto en español** (opcional): solo si configuras **tu propio backend** con `VITE_INTERPRET_API_URL`
+### Interpretar (cámara → texto) — API `sign_ai` (GNN)
 
-Sin backend propio, Interpretar muestra la seña visualmente en SignWriting, pero no palabras en español.
+1. **MediaPipe Holistic** extrae landmarks de manos y cara
+2. El navegador envía una ventana de frames a **`sign_ai`** (`POST /predict` o WebSocket)
+3. El modelo **GAT+Transformer / GCN+LSTM** devuelve la glosa: `HOLA`, `GRACIAS`, etc.
+
+No usa SignWriting. Requiere la API Python en marcha (local o Render).
+
+```bash
+cd sign_ai
+py -3.11 -m venv venv
+venv\Scripts\activate
+pip install -r requirements_api.txt
+uvicorn api:app --port 8000
+```
+
+En `.env` del frontend (opcional si usas el default local):
+
+```
+VITE_ML_API_URL=http://localhost:8000
+```
+
+El modelo actual reconoce **7 señas** (`sign_ai/models/labels_gnn.json`). Para ampliar vocabulario, reentrena con `06_gnn_train.py` y un dataset más grande.
 
 ---
 
@@ -28,35 +45,10 @@ Sin backend propio, Interpretar muestra la seña visualmente en SignWriting, per
 
 ```bash
 npm install
-npm run sync:models   # copia modelos TF.js desde la carpeta translate (hermana)
 npm run dev           # http://localhost:5173
 ```
 
-`sync:models` lee modelos de `C:\Users\josya\Desktop\translate` si existe; no necesitas ejecutar translate ni sus emuladores.
-
----
-
-## Interpretar con tu propio servidor (opcional)
-
-En `.env`:
-
-```
-VITE_INTERPRET_API_URL=http://localhost:8000
-```
-
-Tu API debe aceptar `POST /interpret`:
-
-```json
-{ "tokens": ["M500x500…", "…"], "fsw": "M500x500… …" }
-```
-
-Y responder:
-
-```json
-{ "text": "hola" }
-```
-
-Ahí puedes conectar un modelo de IA entrenado por ti (p. ej. el antiguo `sign_ai` con FastAPI).
+En otra terminal, levanta la API de reconocimiento (`sign_ai`, puerto 8000).
 
 ---
 
@@ -64,11 +56,11 @@ Ahí puedes conectar un modelo de IA entrenado por ti (p. ej. el antiguo `sign_a
 
 ```
 Signara/
-├── src/sign-engine/       → Cámara → SignWriting (TF.js + MediaPipe)
-├── src/utils/interpretApi.js → Cliente de TU API para texto
-├── src/utils/bergamotTranslate.js → Traducir sin servidor
-├── public/models/         → Modelos sincronizados
-└── scripts/sync-models.js
+├── sign_ai/               → API FastAPI + modelo GNN (reconocimiento)
+├── src/components/InterpretScreen.jsx → Cámara → landmarks → API
+├── src/utils/mlApi.js     → Cliente HTTP/WebSocket hacia sign_ai
+├── src/utils/poseApi.js   → Animación 3D (Traducir)
+└── public/pose-viewer/    → Visor 3D
 ```
 
 ---

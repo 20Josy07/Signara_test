@@ -1,8 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+﻿import { useEffect, useRef, useState, useCallback } from 'react'
 import { ResetButton, SectionLabel } from './AppShell.jsx'
-import SignWritingViewer from './SignWritingViewer.jsx'
 import ModeTutorial, { TutorialHelpButton } from './ModeTutorial.jsx'
-import { isInterpretTextEnabled } from '../utils/interpretApi.js'
 import {
   AppPage,
   AppPageFooter,
@@ -13,13 +11,9 @@ import {
   AppPageStagger,
 } from './PageMotion.jsx'
 import { INTERPRET_TUTORIAL_STEPS } from '../data/modeTutorialSteps.js'
+import { COMPACT_DIM, COMPACT_HAND_DIM, FACE_IDX } from '../data/faceIdx.js'
 import { useModeTutorial } from '../hooks/useModeTutorial.js'
-import {
-  initSignEngine,
-  holisticToFswTokens,
-  fswTokensToText,
-  detectSigning,
-} from '../sign-engine/index.js'
+import { ML_API_URL, checkMlApiHealth, createMlPredictSocket, getMlApiCache } from '../utils/mlApi.js'
 
 const MEDIAPIPE_HOLISTIC_VER = '0.5.1675471629'
 const MEDIAPIPE_CAM_VER      = '0.3.1675466862'
@@ -31,26 +25,19 @@ const MP_SCRIPTS = [
   `https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@${MEDIAPIPE_DRAW_VER}/drawing_utils.js`,
 ]
 
-// ── Parámetros de interpretación en tiempo real ───────────────────────────────
-const UMBRAL               = 0.50   // umbral detector de firma (sign-detector)
+// ÔöÇÔöÇ Par├ímetros de reconocimiento en tiempo real ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+const DEFAULT_SEQ_LEN      = 15
+const HAND_COUNT           = 21
+const UMBRAL               = 0.80
+const UMBRAL_HIGH          = 0.88   // confianza alta ÔåÆ menos repeticiones necesarias
+const STABILITY_NEED       = 2      // ventanas consecutivas iguales (normal)
+const STABILITY_NEED_FAST  = 1      // con confianza ÔëÑ UMBRAL_HIGH
 const NO_HAND_RESET        = 20
 const SAME_SIGN_WAIT       = 20
-const MIN_FRAMES_TO_PREDICT = 4
-const MIN_SIGN_HOLD_FRAMES = 4
-const PREDICT_COOLDOWN_MS   = 150
-const HANDS_DOWN_FRAMES     = 6
+const MIN_FRAMES_TO_PREDICT = 4     // m├¡nimo de frames reales antes de la 1┬¬ inferencia
+const PREDICT_COOLDOWN_MS  = 80     // ventana deslizante: inferir ~12├ù/s
 
-function mergeFswTokens(buffer, newTokens) {
-  const seen = new Set(buffer)
-  for (const t of newTokens || []) {
-    if (t && !seen.has(t)) {
-      buffer.push(t)
-      seen.add(t)
-    }
-  }
-}
-
-// ── Script loader ─────────────────────────────────────────────────────────────
+// ÔöÇÔöÇ Script loader ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 function loadScript(url) {
   return new Promise((resolve, reject) => {
@@ -74,7 +61,65 @@ async function loadMediaPipe() {
   for (const url of MP_SCRIPTS) await loadScript(url)
 }
 
-// ── Componente principal ──────────────────────────────────────────────────────
+// ÔöÇÔöÇ Extracci├│n de landmarks ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+//
+// CORRECCI├ôN DE ESPEJO:
+// Python hace cv2.flip(frame,1) ANTES de MediaPipe ÔåÆ landmarks tienen x espejado.
+// El navegador pasa el frame crudo (sin flip) a MediaPipe.
+// Fix: x = 1 - x  +  swap leftÔåöright (en frame crudo, la mano derecha anat├│mica
+// aparece a la izquierda ÔåÆ leftHandLandmarks; en frame flipado aparece a la derecha
+// ÔåÆ right_hand_landmarks).
+//
+// Resultado: slot lh (primeros 63) = mano izquierda anat├│mica de la persona
+//            slot rh (├║ltimos 63)  = mano derecha anat├│mica de la persona
+// Igual que en el entrenamiento.
+
+function extractLandmarks(results) {
+  const handCoords = (landmarks) => {
+    const arr = new Array(HAND_COUNT * 3).fill(0)
+    if (landmarks && landmarks.length > 0) {
+      const n = Math.min(landmarks.length, HAND_COUNT)
+      for (let i = 0; i < n; i++) {
+        arr[i * 3]     = 1.0 - (landmarks[i]?.x ?? 0)
+        arr[i * 3 + 1] = landmarks[i]?.y ?? 0
+        arr[i * 3 + 2] = landmarks[i]?.z ?? 0
+      }
+    }
+    return arr
+  }
+
+  const faceCoords = () => {
+    const arr = new Array(FACE_IDX.length * 3).fill(0)
+    const face = results.faceLandmarks
+    if (face && face.length > 0) {
+      for (let i = 0; i < FACE_IDX.length; i++) {
+        const p = face[FACE_IDX[i]]
+        if (!p) continue
+        arr[i * 3]     = 1.0 - (p.x ?? 0)
+        arr[i * 3 + 1] = p.y ?? 0
+        arr[i * 3 + 2] = p.z ?? 0
+      }
+    }
+    return arr
+  }
+
+  return [
+    ...handCoords(results.rightHandLandmarks),
+    ...handCoords(results.leftHandLandmarks),
+    ...faceCoords(),
+  ]
+}
+
+// Pad del buffer al inicio repitiendo el primer frame hasta llegar a SEQ_LEN.
+// Igual que: while len(seq) < SEQ_LEN: seq.insert(0, seq[0]) en Python.
+function padBuffer(buffer, seqLen) {
+  if (buffer.length === 0) return []
+  const padded = [...buffer]
+  while (padded.length < seqLen) padded.unshift(padded[0])
+  return padded.slice(-seqLen)
+}
+
+// ÔöÇÔöÇ Componente principal ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 export default function InterpretScreen({ onBack, onHome }) {
   const videoRef     = useRef(null)
@@ -84,19 +129,20 @@ export default function InterpretScreen({ onBack, onHome }) {
   const runningRef   = useRef(false)
   const audioRef     = useRef(true)
 
+  // Pipeline refs (sin re-render)
+  const seqLenRef         = useRef(DEFAULT_SEQ_LEN)
+  const compactDimRef     = useRef(COMPACT_DIM)
+  const mlSocketRef       = useRef(null)
+  const predictHandlerRef = useRef(null)
   const landmarkBufferRef = useRef([])
+  const predHistRef       = useRef([])
   const noHandCountRef    = useRef(0)
-  const cooldownRef       = useRef(0)
+  const cooldownRef       = useRef(0)    // cooldown frame-based
+  const lastSignRef       = useRef('')   // ├║ltima se├▒a confirmada (evita repetir)
   const apiInFlightRef    = useRef(false)
-  const fswAccumInFlightRef = useRef(false)
   const lastPredictAtRef  = useRef(0)
   const mlAvailableRef    = useRef(false)
-  const handsModelReadyRef = useRef(false)
-  const signingRef = useRef(false)
-  const fswBufferRef = useRef([])
   const sentenceClearRef  = useRef(null)
-  const lastResultsRef     = useRef(null)
-  const lastSigningProbRef = useRef(0)
 
   // UI state
   const [scriptsLoaded, setScriptsLoaded] = useState(false)
@@ -118,38 +164,80 @@ export default function InterpretScreen({ onBack, onHome }) {
   const [latest,        setLatest]        = useState(null)
   const [history,       setHistory]       = useState([])
   const [sentence,      setSentence]      = useState([])
-  const [lastFswTokens, setLastFswTokens] = useState([])
-  const [apiHint,       setApiHint]       = useState(null)
-  const [liveFswCount,  setLiveFswCount]  = useState(0)
-  const [engineError,   setEngineError]   = useState(null)
+  const [seqLen,        setSeqLen]        = useState(DEFAULT_SEQ_LEN)
+  const [compactDim,    setCompactDim]    = useState(COMPACT_DIM)
 
   useEffect(() => { runningRef.current = running }, [running])
   useEffect(() => { audioRef.current   = audioOn  }, [audioOn])
 
-  // ── Cargar modelos TF.js (sin App Check aquí: compite con la cámara) ───────
+  // ÔöÇÔöÇ Verificar API ML ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
   useEffect(() => {
     let cancelled = false
-    setMlConnecting(true)
-    initSignEngine()
-      .then(() => {
-        if (cancelled) return
-        handsModelReadyRef.current = true
-        mlAvailableRef.current = true
-        setMlMode(true)
-        setMlConnecting(false)
-      })
-      .catch((err) => {
-        if (cancelled) return
-        handsModelReadyRef.current = false
-        mlAvailableRef.current = false
-        setEngineError(String(err?.message || 'Modelos no cargados'))
-        setMlMode(false)
-        setMlConnecting(false)
-      })
+    const cached = getMlApiCache()
+
+    if (cached) {
+      mlAvailableRef.current = cached.ok
+      setMlMode(cached.ok)
+      setMlConnecting(false)
+      if (cached.seqLen) {
+        seqLenRef.current = cached.seqLen
+        setSeqLen(cached.seqLen)
+      }
+      if (cached.compactDim) {
+        compactDimRef.current = cached.compactDim
+        setCompactDim(cached.compactDim)
+      }
+    } else {
+      setMlConnecting(true)
+    }
+
+    checkMlApiHealth().then((result) => {
+      if (cancelled) return
+      mlAvailableRef.current = result.ok
+      setMlMode(result.ok)
+      setMlConnecting(false)
+      if (result.seqLen) {
+        seqLenRef.current = result.seqLen
+        setSeqLen(result.seqLen)
+      }
+      if (result.compactDim) {
+        compactDimRef.current = result.compactDim
+        setCompactDim(result.compactDim)
+      }
+    })
+
     return () => { cancelled = true }
   }, [])
 
-  // ── Cargar MediaPipe ───────────────────────────────────────────────────────
+  // ÔöÇÔöÇ WebSocket ML (menor latencia que HTTP por frame) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  useEffect(() => {
+    if (!mlMode) {
+      mlSocketRef.current?.close()
+      mlSocketRef.current = null
+      return undefined
+    }
+
+    const socket = createMlPredictSocket({
+      onMessage: (data) => {
+        const handler = predictHandlerRef.current
+        predictHandlerRef.current = null
+        apiInFlightRef.current = false
+        if (handler) handler(data)
+      },
+      onError: () => {
+        predictHandlerRef.current = null
+        apiInFlightRef.current = false
+      },
+      onClose: () => {
+        mlSocketRef.current = null
+      },
+    })
+    mlSocketRef.current = socket
+
+    return () => socket.close()
+  }, [mlMode])
+
+  // ÔöÇÔöÇ Cargar MediaPipe ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
   useEffect(() => {
     let cancelled = false
     loadMediaPipe()
@@ -158,13 +246,13 @@ export default function InterpretScreen({ onBack, onHome }) {
     return () => { cancelled = true }
   }, [])
 
-  // ── Inicializar Holistic + cámara (solo tras consentimiento del usuario) ───
+  // ÔöÇÔöÇ Inicializar Holistic + c├ímara (solo tras consentimiento del usuario) ÔöÇÔöÇÔöÇ
   useEffect(() => {
     if (!scriptsLoaded || cameraConsent !== 'accepted') return
     const HolisticCtor = window.Holistic
     const CameraCtor   = window.Camera
     if (!HolisticCtor || !CameraCtor) {
-      setScriptsError('MediaPipe no se cargó correctamente.')
+      setScriptsError('MediaPipe no se carg├│ correctamente.')
       return
     }
     const videoEl = videoRef.current
@@ -178,7 +266,7 @@ export default function InterpretScreen({ onBack, onHome }) {
       modelComplexity:        0,
       smoothLandmarks:        true,
       enableSegmentation:     false,
-      refineFaceLandmarks:    false,
+      refineFaceLandmarks:    true,
       minDetectionConfidence: 0.5,
       minTrackingConfidence:  0.5,
     })
@@ -191,7 +279,7 @@ export default function InterpretScreen({ onBack, onHome }) {
           try { await holisticRef.current.send({ image: videoEl }) } catch (_) {}
         }
       },
-      width: 640, height: 480,
+      width: 320, height: 240,
     })
     cameraRef.current = camera
 
@@ -199,8 +287,8 @@ export default function InterpretScreen({ onBack, onHome }) {
       .then(() => setCameraOk(true))
       .catch(e => setCameraError(
         e?.name === 'NotAllowedError'
-          ? 'Permiso de cámara denegado. Habilítalo en tu navegador.'
-          : 'No se pudo acceder a la cámara.'
+          ? 'Permiso de c├ímara denegado. Habil├¡talo en tu navegador.'
+          : 'No se pudo acceder a la c├ímara.'
       ))
 
     return () => {
@@ -232,7 +320,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     setCameraRetryKey((k) => k + 1)
   }
 
-  // ── Voz ───────────────────────────────────────────────────────────────────
+  // ÔöÇÔöÇ Voz ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
   function speak(text) {
     if (!audioRef.current || !text) return
     if (!window?.speechSynthesis) return
@@ -244,72 +332,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     } catch (e) { console.warn(e) }
   }
 
-  const finalizeCapturedSign = useCallback((tokens, confidence) => {
-    if (!tokens?.length || apiInFlightRef.current) return
-    apiInFlightRef.current = true
-    setLastFswTokens(tokens)
-    fswBufferRef.current = []
-    landmarkBufferRef.current = []
-    signingRef.current = false
-    setLiveFswCount(0)
-
-    fswTokensToText(tokens)
-      .then((text) => {
-        if (text?.trim()) {
-          const prediction = text.trim()
-          triggerRecognition(prediction.replace(/\s+/g, '_'), confidence)
-          setDisplaySign(prediction.replace(/\s+/g, '_'))
-          setApiHint(null)
-        } else {
-          setLatest({ sign: '', text: '', confidence })
-          setDisplaySign('')
-          setApiHint(
-            isInterpretTextEnabled()
-              ? 'Seña capturada en SignWriting, pero tu API no devolvió texto.'
-              : 'Seña capturada en SignWriting. El texto en español requiere tu propio servidor ' +
-                '(VITE_INTERPRET_API_URL en .env).',
-          )
-        }
-        setDisplayConf(confidence)
-        cooldownRef.current = SAME_SIGN_WAIT
-        setInCooldown(true)
-      })
-      .catch((err) => {
-        console.warn('[interpret] traducción:', err?.message || err)
-        setApiHint(
-          'SignWriting capturado. Error al pedir texto a tu API: ' +
-          (err?.message || 'revisa la consola (F12).'),
-        )
-      })
-      .finally(() => { apiInFlightRef.current = false })
-  }, [])
-
-  const captureFromResults = useCallback(async (results, w, h, confidence = 0.7) => {
-    if (!results || !handsModelReadyRef.current) return
-    const tokens = await holisticToFswTokens(results, w, h, { handsOnly: true })
-    if (!tokens?.length) {
-      setApiHint('No se leyeron las manos. Acércate, buena luz, manos abiertas frente a la cámara.')
-      return
-    }
-    finalizeCapturedSign(tokens, confidence)
-  }, [finalizeCapturedSign])
-
-  const captureNow = useCallback(async () => {
-    const results = lastResultsRef.current
-    const canvas = canvasRef.current
-    if (!results || !canvas) {
-      setApiHint('Espera a que la cámara esté activa y las manos se vean.')
-      return
-    }
-    await captureFromResults(
-      results,
-      canvas.width,
-      canvas.height,
-      lastSigningProbRef.current || 0.7,
-    )
-  }, [captureFromResults])
-
-  // ── Confirmar seña ────────────────────────────────────────────────────────
+  // ÔöÇÔöÇ Confirmar se├▒a ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
   function triggerRecognition(sign, confidence) {
     const text = sign.replace(/_/g, ' ')
     const det  = { sign, text, confidence }
@@ -321,9 +344,8 @@ export default function InterpretScreen({ onBack, onHome }) {
     speak(text)
   }
 
-  // ── Callback principal de MediaPipe ───────────────────────────────────────
+  // ÔöÇÔöÇ Callback principal de MediaPipe ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
   function handleResults(results) {
-    lastResultsRef.current = results
     const canvas = canvasRef.current
     const video  = videoRef.current
     if (!canvas || !video) return
@@ -338,7 +360,7 @@ export default function InterpretScreen({ onBack, onHome }) {
     const hasRight = !!results.rightHandLandmarks
     const hasHands = hasLeft || hasRight
 
-    // ── Dibuja manos en el canvas ───────────────────────────────────────────
+    // ÔöÇÔöÇ Solo dibuja manos (igual que 07_gnn_predict.py) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
     if (window.drawConnectors && window.drawLandmarks) {
       if (hasLeft) {
         window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS,
@@ -364,23 +386,14 @@ export default function InterpretScreen({ onBack, onHome }) {
       setInCooldown(cooldownRef.current > 0)
     }
 
-    // ── Sin manos ────────────────────────────────────────────────────────────
+    // ÔöÇÔöÇ Sin manos ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
     if (!hasHands) {
-      if (
-        fswBufferRef.current.length > 0 &&
-        landmarkBufferRef.current.length >= MIN_SIGN_HOLD_FRAMES &&
-        cooldownRef.current === 0
-      ) {
-        finalizeCapturedSign(
-          [...fswBufferRef.current],
-          lastSigningProbRef.current || 0.5,
-        )
-      }
-      signingRef.current = false
       noHandCountRef.current++
       if (noHandCountRef.current >= NO_HAND_RESET) {
-        fswBufferRef.current = []
+        // Reset completo igual que Python
         landmarkBufferRef.current = []
+        predHistRef.current       = []
+        lastSignRef.current       = ''
         cooldownRef.current       = 0
         setDisplaySign('')
         setDisplayConf(0)
@@ -391,48 +404,109 @@ export default function InterpretScreen({ onBack, onHome }) {
       return
     }
 
-    // ── Con manos ────────────────────────────────────────────────────────────
+    // ÔöÇÔöÇ Con manos ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
     noHandCountRef.current = 0
 
-    const w = canvas.width
-    const h = canvas.height
-    const poseOk = results.poseLandmarks?.length > 0
-    const signingProb = handsModelReadyRef.current && poseOk ? detectSigning(results) : (hasHands ? 0.5 : 0)
-    lastSigningProbRef.current = signingProb
-    setLiveConf(signingProb)
+    const currFrame = extractLandmarks(results)
 
-    // Acumular FSW siempre que hay manos (no depende del sign-detector)
-    if (runningRef.current && handsModelReadyRef.current && cooldownRef.current === 0) {
-      landmarkBufferRef.current.push(1)
-      const now = Date.now()
-      if (now - lastPredictAtRef.current >= PREDICT_COOLDOWN_MS && !fswAccumInFlightRef.current) {
-        lastPredictAtRef.current = now
-        fswAccumInFlightRef.current = true
-        holisticToFswTokens(results, w, h, { handsOnly: true })
-          .then((tokens) => {
-            if (tokens?.length) {
-              mergeFswTokens(fswBufferRef.current, tokens)
-              setLiveFswCount(fswBufferRef.current.length)
-              setLastFswTokens([...fswBufferRef.current])
-            }
-          })
-          .catch((err) => {
-            console.warn('[interpret] FSW:', err?.message || err)
-          })
-          .finally(() => { fswAccumInFlightRef.current = false })
-      }
+    // Acumular cada frame con manos visibles (ventana deslizante)
+    landmarkBufferRef.current.push(currFrame)
+    const maxLen = seqLenRef.current * 2
+    if (landmarkBufferRef.current.length > maxLen) {
+      landmarkBufferRef.current.shift()
     }
 
-    setBufferLen(landmarkBufferRef.current.length)
+    const n = landmarkBufferRef.current.length
+    const activeSeqLen = seqLenRef.current
+    setBufferLen(n)
+
+    // ÔöÇÔöÇ Inferencia con ventana deslizante (no esperar a llenar SEQ_LEN) ÔöÇÔöÇÔöÇÔöÇÔöÇ
+    if (
+      runningRef.current        &&
+      mlAvailableRef.current    &&
+      n >= MIN_FRAMES_TO_PREDICT &&
+      cooldownRef.current === 0 &&
+      !apiInFlightRef.current   &&
+      Date.now() - lastPredictAtRef.current >= PREDICT_COOLDOWN_MS
+    ) {
+      const bufferCopy = padBuffer([...landmarkBufferRef.current], activeSeqLen)
+      const payload = compactDimRef.current === COMPACT_HAND_DIM
+        ? bufferCopy.map((f) => f.slice(0, COMPACT_HAND_DIM))
+        : bufferCopy
+      apiInFlightRef.current = true
+      lastPredictAtRef.current = Date.now()
+
+      const applyPrediction = ({ prediction, confidence, is_idle, error }) => {
+        if (error) return
+
+        setLiveConf(confidence)
+
+        if (is_idle || !prediction) {
+          if (confidence < 0.45) predHistRef.current = []
+          return
+        }
+
+        if (confidence >= UMBRAL) {
+          predHistRef.current.push(prediction)
+          const need = confidence >= UMBRAL_HIGH ? STABILITY_NEED_FAST : STABILITY_NEED
+          if (predHistRef.current.length > need) {
+            predHistRef.current.shift()
+          }
+
+          if (
+            predHistRef.current.length >= need &&
+            new Set(predHistRef.current).size === 1 &&
+            prediction !== lastSignRef.current
+          ) {
+            lastSignRef.current       = prediction
+            cooldownRef.current       = SAME_SIGN_WAIT
+            landmarkBufferRef.current = []
+            predHistRef.current       = []
+
+            setDisplaySign(prediction)
+            setDisplayConf(confidence)
+            setBufferLen(0)
+            setLiveConf(confidence)
+            setInCooldown(true)
+            triggerRecognition(prediction, confidence)
+          }
+        } else if (confidence < 0.45) {
+          predHistRef.current = []
+        }
+      }
+
+      const socket = mlSocketRef.current
+      if (socket?.ready && socket.send(payload)) {
+        predictHandlerRef.current = applyPrediction
+        return
+      }
+
+      ;(async () => {
+        try {
+          const resp = await fetch(`${ML_API_URL}/predict`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ frames: payload }),
+          })
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+          applyPrediction(await resp.json())
+        } catch {
+          mlAvailableRef.current = false
+          setMlMode(false)
+        } finally {
+          apiInFlightRef.current = false
+        }
+      })()
+    }
   }
 
-  // ── Controles ─────────────────────────────────────────────────────────────
+  // ÔöÇÔöÇ Controles ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
   function startDetect() {
     landmarkBufferRef.current = []
-    fswBufferRef.current      = []
-    signingRef.current        = false
+    predHistRef.current       = []
     noHandCountRef.current    = 0
     cooldownRef.current       = 0
+    lastSignRef.current       = ''
     apiInFlightRef.current    = false
     lastPredictAtRef.current  = 0
     setBufferLen(0)
@@ -440,14 +514,6 @@ export default function InterpretScreen({ onBack, onHome }) {
     setInCooldown(false)
     setDisplaySign('')
     setDisplayConf(0)
-    setLastFswTokens([])
-    setLiveFswCount(0)
-    setApiHint(null)
-    if (!isInterpretTextEnabled()) {
-      setApiHint(
-        'Modo visual: verás la seña en SignWriting. Para texto en español, configura VITE_INTERPRET_API_URL.',
-      )
-    }
     setRunning(true)
   }
 
@@ -458,10 +524,10 @@ export default function InterpretScreen({ onBack, onHome }) {
 
   const handleReset = useCallback(() => {
     landmarkBufferRef.current = []
-    fswBufferRef.current      = []
-    fswBufferRef.current      = []
-    signingRef.current        = false
+    predHistRef.current       = []
+    noHandCountRef.current    = 0
     cooldownRef.current       = 0
+    lastSignRef.current       = ''
     apiInFlightRef.current    = false
     lastPredictAtRef.current  = 0
     setLatest(null)
@@ -478,31 +544,27 @@ export default function InterpretScreen({ onBack, onHome }) {
 
   function retryMlConnection() {
     setMlConnecting(true)
-    initSignEngine()
-      .then(() => {
-        handsModelReadyRef.current = true
-        mlAvailableRef.current = true
-        setMlMode(true)
-        setMlConnecting(false)
-      })
-      .catch(() => {
-        handsModelReadyRef.current = false
-        setMlMode(false)
+    checkMlApiHealth({ force: true })
+      .then((result) => {
+        mlAvailableRef.current = result.ok
+        setMlMode(result.ok)
         setMlConnecting(false)
       })
   }
 
-  // ── Status HUD ────────────────────────────────────────────────────────────
+  // ÔöÇÔöÇ Status HUD ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
   const statusLabel = (() => {
     if (cameraConsent === null)    return 'Permiso requerido'
-    if (cameraConsent === 'declined') return 'Cámara desactivada'
-    if (!cameraOk && cameraError)  return 'Sin acceso a cámara'
-    if (!running)                  return cameraOk ? 'Listo' : 'Conectando…'
-    if (!mlMode)                   return '⚠ Modelos de IA no listos'
-    if (!handVisible)              return 'Muestra las manos frente a la cámara'
-    if (liveFswCount > 0)          return `Leyendo seña… (${liveFswCount} símbolo${liveFswCount > 1 ? 's' : ''})`
-    if (bufferLen > 0)             return 'Capturando… baja las manos o pulsa Capturar'
-    return 'Haz una seña y manténla 1–2 s'
+    if (cameraConsent === 'declined') return 'C├ímara desactivada'
+    if (!cameraOk && cameraError)  return 'Sin acceso a c├ímara'
+    if (!running)                  return cameraOk ? 'Listo' : 'ConectandoÔÇª'
+    if (!mlMode)                   return 'ÔÜá Servidor IA no conectado'
+    if (!handVisible)              return 'Muestra una mano'
+    if (displaySign && inCooldown) return `${displaySign.replace(/_/g, ' ')} ┬À ${Math.round(displayConf * 100)}%`
+    if (liveConf >= UMBRAL)        return `ReconociendoÔÇª ${Math.round(liveConf * 100)}%`
+    if (bufferLen >= MIN_FRAMES_TO_PREDICT) return `AnalizandoÔÇª ${Math.round(liveConf * 100)}%`
+    if (bufferLen > 0)             return 'Capturando se├▒aÔÇª'
+    return 'Haz la se├▒a'
   })()
 
   const bufferProgress = running && mlMode && handVisible && !inCooldown
@@ -546,13 +608,13 @@ export default function InterpretScreen({ onBack, onHome }) {
               <div>
                 <SectionLabel color="blue">Interpretar</SectionLabel>
                 <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
-                  De señas a{' '}
+                  De se├▒as a{' '}
                   <span className="inline-block rounded-xl border-2 border-pastel-blue-line bg-pastel-blue px-2.5 py-0.5 shadow-[0_8px_18px_-8px_rgba(45,42,38,0.35)]">
                     texto
                   </span>
                 </h1>
                 <p className="mt-3 max-w-lg text-sm font-semibold text-pastel-sub sm:text-base">
-                  Muestra tus manos a la cámara y Signara las convertirá en palabras.
+                  Muestra tus manos a la c├ímara y Signara las convertir├í en palabras.
                 </p>
               </div>
 
@@ -593,7 +655,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-ink/70">
-                          📷 Tu cámara
+                          ­ƒôÀ Tu c├ímara
                         </p>
                         <p className="mt-0.5 text-lg font-extrabold text-pastel-ink">{statusLabel}</p>
                       </div>
@@ -611,7 +673,7 @@ export default function InterpretScreen({ onBack, onHome }) {
                               />
                             </div>
                             <span className="text-xs font-bold tabular-nums text-pastel-ink">
-                              {liveConf > 0 ? `${Math.round(liveConf * 100)}%` : '…'}
+                              {liveConf > 0 ? `${Math.round(liveConf * 100)}%` : 'ÔÇª'}
                             </span>
                           </div>
                         </div>
@@ -628,18 +690,18 @@ export default function InterpretScreen({ onBack, onHome }) {
                       style={{ transform: 'scaleX(-1)' }} />
 
                     {!scriptsLoaded && !scriptsError && (
-                      <CameraOverlay icon="⏳" title="Cargando MediaPipe…" />
+                      <CameraOverlay icon="ÔÅ│" title="Cargando MediaPipeÔÇª" />
                     )}
                     {scriptsError && (
-                      <CameraOverlay icon="⚠️" title="Error cargando MediaPipe" subtitle={scriptsError} />
+                      <CameraOverlay icon="ÔÜá´©Å" title="Error cargando MediaPipe" subtitle={scriptsError} />
                     )}
                     {scriptsLoaded && cameraConsent === 'accepted' && !cameraOk && !cameraError && (
-                      <CameraOverlay icon="📷" title="Conectando cámara…" />
+                      <CameraOverlay icon="­ƒôÀ" title="Conectando c├ímaraÔÇª" />
                     )}
                     {cameraError && (
                       <CameraOverlay
-                        icon="🚫"
-                        title="No se pudo iniciar la cámara"
+                        icon="­ƒÜ½"
+                        title="No se pudo iniciar la c├ímara"
                         subtitle={cameraError}
                         actionLabel="Reintentar"
                         onAction={retryCameraAccess}
@@ -649,16 +711,17 @@ export default function InterpretScreen({ onBack, onHome }) {
                     {running && !mlMode && !mlConnecting && (
                       <div className="absolute inset-0 flex items-center justify-center bg-pastel-ink/75 p-6 backdrop-blur-sm">
                         <div className="max-w-sm rounded-2xl border-2 border-pastel-blue-line bg-[#FAF6EC] p-5 text-center shadow-xl">
-                          <p className="text-3xl">⚠️</p>
-                          <p className="mt-2 text-lg font-extrabold text-pastel-ink">Modelos de IA no cargados</p>
-                          <p className="mt-1 text-xs font-semibold text-pastel-sub">
-                            Ejecuta <code className="font-mono">npm run sync:models</code> y recarga la página.
-                          </p>
+                          <p className="text-3xl">ÔÜá´©Å</p>
+                          <p className="mt-2 text-lg font-extrabold text-pastel-ink">Servidor IA no conectado</p>
+                          <p className="mt-1 text-xs font-semibold text-pastel-sub">Ejecuta en una terminal:</p>
+                          <code className="mt-3 block rounded-xl border-2 border-pastel-ink/10 bg-white px-3 py-2 text-left text-[11px] font-mono text-pastel-grape">
+                            cd sign_ai &amp;&amp; uvicorn api:app --port 8000
+                          </code>
                           <button
                             onClick={retryMlConnection}
                             className="mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-pastel-grape px-5 text-sm font-bold text-white transition hover:brightness-110"
                           >
-                            Reintentar conexión
+                            Reintentar conexi├│n
                           </button>
                         </div>
                       </div>
@@ -675,7 +738,7 @@ export default function InterpretScreen({ onBack, onHome }) {
 
                     <div className="absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-xl border-2 border-white/20 bg-black/50 px-2.5 py-1.5 text-xs font-bold text-white backdrop-blur">
                       <span className={'h-2 w-2 rounded-full ' + (running ? 'bg-red-400 animate-pulse' : cameraOk ? 'bg-green-400' : 'bg-white/50')} />
-                      {running ? 'REC' : cameraOk ? 'Lista' : '…'}
+                      {running ? 'REC' : cameraOk ? 'Lista' : 'ÔÇª'}
                     </div>
                   </div>
 
@@ -687,9 +750,9 @@ export default function InterpretScreen({ onBack, onHome }) {
                   )}
                   {scriptsLoaded && cameraConsent === 'declined' && !cameraOk && (
                     <CameraOverlay
-                      icon="📷"
-                      title="Cámara no activada"
-                      subtitle="Sin permiso de cámara no podemos interpretar tus señas. Puedes concederlo cuando quieras."
+                      icon="­ƒôÀ"
+                      title="C├ímara no activada"
+                      subtitle="Sin permiso de c├ímara no podemos interpretar tus se├▒as. Puedes concederlo cuando quieras."
                       actionLabel="Conceder permisos"
                       onAction={acceptCameraPermission}
                     />
@@ -707,22 +770,13 @@ export default function InterpretScreen({ onBack, onHome }) {
                         Empezar a interpretar
                       </button>
                     ) : (
-                      <>
-                        <button
-                          onClick={captureNow}
-                          disabled={!handVisible || !mlMode}
-                          className="inline-flex h-11 items-center gap-2 rounded-xl border-2 border-pastel-grape bg-white px-5 text-sm font-bold text-pastel-grape transition hover:bg-pastel-purple/30 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Capturar seña
-                        </button>
-                        <button
-                          onClick={stopDetect}
-                          className="inline-flex h-11 items-center gap-2 rounded-xl border-2 border-pastel-ink/20 bg-white px-5 text-sm font-bold text-pastel-ink transition hover:bg-pastel-cream"
-                        >
-                          <StopIcon />
-                          Detener
-                        </button>
-                      </>
+                      <button
+                        onClick={stopDetect}
+                        className="inline-flex h-11 items-center gap-2 rounded-xl border-2 border-pastel-ink/20 bg-white px-5 text-sm font-bold text-pastel-ink transition hover:bg-pastel-cream"
+                      >
+                        <StopIcon />
+                        Detener
+                      </button>
                     )}
 
                     <label className="ml-auto inline-flex cursor-pointer select-none items-center gap-2 rounded-xl border-2 border-white/60 bg-white/80 px-3 py-2 text-sm font-bold text-pastel-ink">
@@ -732,13 +786,13 @@ export default function InterpretScreen({ onBack, onHome }) {
                         onChange={(e) => setAudioOn(e.target.checked)}
                         className="h-4 w-4 accent-pastel-grape"
                       />
-                      🔊 Voz alta
+                      ­ƒöè Voz alta
                     </label>
                   </div>
                 </div>
 
                 {sentence.length > 0 && (
-                  <OutputCard title="Conversación" emptyIcon="💬" hasContent>
+                  <OutputCard title="Conversaci├│n" emptyIcon="­ƒÆ¼" hasContent>
                     <p className="text-xl font-extrabold leading-relaxed tracking-wide text-pastel-ink sm:text-2xl">
                       {sentence.map((s) => s.replace(/_/g, ' ')).join(' ')}
                     </p>
@@ -748,12 +802,8 @@ export default function InterpretScreen({ onBack, onHome }) {
                 {!running && !history.length && (
                   <div className="rounded-2xl border-2 border-dashed border-pastel-blue-line bg-pastel-blue/40 px-4 py-4 text-center">
                     <p className="text-sm font-bold text-pastel-ink">
-                      Pulsa <strong className="text-pastel-grape">Empezar a interpretar</strong>.
-                      Sostén la seña 1–2 s con las manos visibles, luego <strong>baja las manos</strong> o usa <strong>Capturar seña</strong>.
+                      Pulsa <strong className="text-pastel-grape">Empezar a interpretar</strong> y mant├®n cada se├▒a unos segundos, clara y estable, antes de cambiar.
                     </p>
-                    {engineError && (
-                      <p className="mt-2 text-xs font-semibold text-red-700">{engineError}</p>
-                    )}
                   </div>
                 )}
               </AppPageStagger>
@@ -763,29 +813,12 @@ export default function InterpretScreen({ onBack, onHome }) {
                   data-tutorial="interpret-results"
                   className="motion-surface animate-motion-scale-in rounded-[1.5rem] border-[3px] border-pastel-blue-line bg-white p-5 shadow-[0_16px_36px_-22px_rgba(45,42,38,0.35)] sm:p-6"
                 >
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">Última seña</p>
-                  {latest || lastFswTokens.length > 0 ? (
+                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">├Ültima se├▒a</p>
+                  {latest ? (
                     <>
-                      {latest?.sign ? (
-                        <p className="mt-3 text-4xl font-extrabold uppercase tracking-tight text-pastel-grape sm:text-5xl">
-                          {latest.sign.replace(/_/g, ' ')}
-                        </p>
-                      ) : null}
-                      {lastFswTokens.length > 0 && (
-                        <div className="mt-4 rounded-xl border-2 border-pastel-blue-line/60 bg-pastel-cream/80 p-3">
-                          <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-pastel-sub">
-                            SignWriting detectado
-                            {running && liveFswCount > 0 ? ` (${liveFswCount})` : ''}
-                          </p>
-                          <SignWritingViewer tokens={lastFswTokens} />
-                        </div>
-                      )}
-                      {apiHint && (
-                        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
-                          {apiHint}
-                        </p>
-                      )}
-                      {latest?.sign && (
+                      <p className="mt-3 text-4xl font-extrabold uppercase tracking-tight text-pastel-grape sm:text-5xl">
+                        {latest.sign.replace(/_/g, ' ')}
+                      </p>
                       <div className="mt-4">
                         <div className="mb-1 flex justify-between text-xs font-bold text-pastel-sub">
                           <span>Confianza</span>
@@ -798,13 +831,12 @@ export default function InterpretScreen({ onBack, onHome }) {
                           />
                         </div>
                       </div>
-                      )}
                     </>
                   ) : (
                     <div className="mt-4 flex flex-col items-center rounded-xl border-2 border-dashed border-pastel-ink/10 bg-pastel-cream/50 px-4 py-8 text-center">
-                      <span className="text-4xl opacity-50">🤟</span>
+                      <span className="text-4xl opacity-50">­ƒñƒ</span>
                       <p className="mt-2 text-sm font-semibold text-pastel-sub">
-                        Aquí aparecerá la seña reconocida
+                        Aqu├¡ aparecer├í la se├▒a reconocida
                       </p>
                     </div>
                   )}
@@ -814,9 +846,9 @@ export default function InterpretScreen({ onBack, onHome }) {
                 <div data-tutorial="interpret-history">
                 <OutputCard
                   title="Historial reciente"
-                  emptyIcon="📋"
+                  emptyIcon="­ƒôï"
                   hasContent={history.length > 0}
-                  empty="Cada seña reconocida aparecerá aquí."
+                  empty="Cada se├▒a reconocida aparecer├í aqu├¡."
                 >
                   <ul className="space-y-2">
                     {history.map((h, i) => (
@@ -840,7 +872,7 @@ export default function InterpretScreen({ onBack, onHome }) {
       </AppPageMain>
 
       <AppPageFooter>
-        <p className="text-xs text-pastel-sub">GNN + LSTM · solo manos · MediaPipe Holistic</p>
+        <p className="text-xs text-pastel-sub">GNN + LSTM ┬À solo manos ┬À MediaPipe Holistic</p>
       </AppPageFooter>
 
       <ModeTutorial
@@ -867,7 +899,7 @@ function StatusPill({ variant, children }) {
 
 function MlStatusPill({ mlMode, mlConnecting, onRetry }) {
   const connected = mlMode && !mlConnecting
-  const label = mlConnecting ? 'Conectando IA…' : mlMode ? 'IA conectada' : 'Sin conexión IA'
+  const label = mlConnecting ? 'Conectando IAÔÇª' : mlMode ? 'IA conectada' : 'Sin conexi├│n IA'
   return (
     <button
       type="button"
@@ -881,7 +913,7 @@ function MlStatusPill({ mlMode, mlConnecting, onRetry }) {
             ? 'border-pastel-yellow-line bg-pastel-yellow text-pastel-ink cursor-default'
             : 'border-pastel-pink/50 bg-white text-pastel-sub hover:border-pastel-purple-line cursor-pointer')
       }
-      title={onRetry ? 'Reintentar conexión con IA' : undefined}
+      title={onRetry ? 'Reintentar conexi├│n con IA' : undefined}
     >
       <span className={`h-2 w-2 rounded-full ${
         mlConnecting ? 'bg-pastel-yellow-line animate-pulse' :
@@ -917,17 +949,17 @@ function CameraPermissionPrompt({ onAccept, onDecline }) {
           style={{ animationDuration: '3.5s' }}
           aria-hidden="true"
         >
-          📷
+          ­ƒôÀ
         </p>
         <p className="animate-permission-item-in mt-2 text-base font-extrabold text-pastel-ink sm:text-lg">
-          Necesitamos tu cámara
+          Necesitamos tu c├ímara
         </p>
         <p
           className="animate-permission-item-in mt-2 text-xs leading-relaxed text-pastel-sub sm:text-sm"
           style={{ animationDelay: '80ms' }}
         >
-          Para interpretar lengua de señas, Signara necesita acceso a la cámara de tu dispositivo.
-          Si no concedes el permiso, esta función no estará disponible.
+          Para interpretar lengua de se├▒as, Signara necesita acceso a la c├ímara de tu dispositivo.
+          Si no concedes el permiso, esta funci├│n no estar├í disponible.
         </p>
         <div
           className="animate-permission-item-in mt-4 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:justify-center"
