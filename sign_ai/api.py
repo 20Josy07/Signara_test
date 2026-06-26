@@ -122,7 +122,7 @@ async def load_model():
     _model_loaded = True
     print(
         f"Modelo ONNX cargado — clases: {_labels} | "
-        f"SEQ_LEN={_legacy_seq_len} | nodos={LEGACY_HAND_NODES} | "
+        f"SEQ_LEN={_legacy_seq_len} | nodos={LEGACY_N_NODES} | "
         f"normalizacion={_normalize_inputs} | umbral={UMBRAL_CONFIANZA}"
     )
 
