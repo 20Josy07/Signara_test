@@ -5,7 +5,6 @@ import TranslationScreen from './components/TranslationScreen.jsx'
 import InterpretScreen from './components/InterpretScreen.jsx'
 import ScreenTransition from './components/ScreenTransition.jsx'
 import { setCurrentAvatar } from './utils/signMap.js'
-import { warmupBergamot } from './utils/bergamotTranslate.js'
 
 /**
  * App
@@ -71,12 +70,6 @@ export default function App() {
     setAvatarId(stored)
     setCurrentAvatar(stored)
   }, [])
-
-  useEffect(() => {
-    if (screen === 'translate') {
-      warmupBergamot()
-    }
-  }, [screen])
 
   useEffect(() => {
     const onNavigate = () => {

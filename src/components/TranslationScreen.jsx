@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ResetButton, SectionLabel } from './AppShell.jsx'
 import AvatarPlayer from './AvatarPlayer.jsx'
-import SignWritingViewer from './SignWritingViewer.jsx'
+import PoseViewer from './PoseViewer.jsx'
 import TextInputPanel from './TextInputPanel.jsx'
 import SignChips from './SignChips.jsx'
 import ModeTutorial, { TutorialHelpButton } from './ModeTutorial.jsx'
@@ -35,8 +35,9 @@ export default function TranslationScreen({
 }) {
   const [originalText, setOriginalText] = useState('')
   const [signs, setSigns] = useState([])
-  const [signWriting, setSignWriting] = useState([])
+  const [poseSrc, setPoseSrc] = useState(null)
   const [translateSource, setTranslateSource] = useState(null)
+  const [poseError, setPoseError] = useState(null)
   const [activeSign, setActiveSign] = useState(null)
   const [busy, setBusy] = useState(false)
   const [liveMode, setLiveMode] = useState(false)
@@ -46,6 +47,7 @@ export default function TranslationScreen({
 
   const avatarRef = useRef(null)
   const inputRef = useRef(null)
+  const poseBlobRef = useRef(null)
   const liveQueuedRef = useRef([])
   const pendingWordRef = useRef('')
   const missedTimerRef = useRef(null)
@@ -62,6 +64,13 @@ export default function TranslationScreen({
     setCurrentAvatar(avatarId)
   }, [avatarId])
 
+  const revokePoseBlob = useCallback(() => {
+    if (poseBlobRef.current?.startsWith('blob:')) {
+      URL.revokeObjectURL(poseBlobRef.current)
+      poseBlobRef.current = null
+    }
+  }, [])
+
   const resetVoice = useCallback(() => {
     if (inputRef.current) inputRef.current.clear()
   }, [])
@@ -71,10 +80,12 @@ export default function TranslationScreen({
   }, [])
 
   const resetState = useCallback(() => {
+    revokePoseBlob()
     setOriginalText('')
     setSigns([])
-    setSignWriting([])
+    setPoseSrc(null)
     setTranslateSource(null)
+    setPoseError(null)
     setActiveSign(null)
     setBusy(false)
     setLiveMode(false)
@@ -83,7 +94,7 @@ export default function TranslationScreen({
     liveQueuedRef.current = []
     pendingWordRef.current = ''
     if (missedTimerRef.current) clearTimeout(missedTimerRef.current)
-  }, [])
+  }, [revokePoseBlob])
 
   const handleReset = useCallback(() => {
     resetVoice()
@@ -104,33 +115,50 @@ export default function TranslationScreen({
   const handleSubmit = useCallback(async (text) => {
     setBusy(true)
     setOriginalText(text)
-    setSignWriting([])
+    setPoseError(null)
+    revokePoseBlob()
+    setPoseSrc(null)
+
     try {
       const result = await translateText(text)
       setTranslateSource(result.source)
       setOriginalText(result.text || text)
 
-      if (result.tokens?.length) {
-        setSignWriting(result.tokens)
-      } else {
-        setSignWriting([])
+      if (result.poseSrc) {
+        poseBlobRef.current = result.poseSrc
+        setPoseSrc(result.poseSrc)
       }
 
       const avatarSigns = result.fallback?.length ? result.fallback : []
       setSigns(avatarSigns)
 
-      // Avatar MP4 solo si Bergamot no devolvió SignWriting
-      if (!result.tokens?.length && avatarSigns.length) {
+      if (!result.poseSrc && avatarSigns.length) {
         requestAnimationFrame(() => avatarRef.current?.replace(avatarSigns))
       } else if (avatarRef.current) {
         avatarRef.current.clear()
       }
+
+      if (result.source === 'local' && !avatarSigns.length) {
+        setPoseError('No hay animación 3D ni video local para este texto.')
+      }
     } catch (e) {
       console.error(e)
+      setPoseError('Error al traducir.')
     } finally {
       setBusy(false)
     }
-  }, [])
+  }, [revokePoseBlob])
+
+  const handlePoseError = useCallback((err) => {
+    setPoseError(
+      typeof err === 'string' ? err : 'No se pudo cargar la animación 3D. Mostrando avatar local si hay video.',
+    )
+    setPoseSrc(null)
+    revokePoseBlob()
+    if (signs.length) {
+      requestAnimationFrame(() => avatarRef.current?.replace(signs))
+    }
+  }, [revokePoseBlob, signs])
 
   const handleLiveWord = useCallback((rawWord) => {
     const cleaned = String(rawWord || '').trim()
@@ -199,12 +227,8 @@ export default function TranslationScreen({
     }
   }
 
-  const displaySigns = signWriting.length
-    ? signWriting.map((_, i) => `Seña ${i + 1}`)
-    : signs.map((s) => s.replace('.mp4', '').replace(/_/g, ' ').toUpperCase())
-
-  const bergamotActive = translateSource === 'bergamot' && signWriting.length > 0
-  const hasAvatarSigns = signs.length > 0 && !bergamotActive
+  const displaySigns = signs.map((s) => s.replace('.mp4', '').replace(/_/g, ' ').toUpperCase())
+  const hasPose3d = translateSource === 'pose3d' && !!poseSrc
 
   const tutorial = useModeTutorial('translate')
 
@@ -253,12 +277,10 @@ export default function TranslationScreen({
                   </StatusPill>
                 )}
                 {busy && <StatusPill variant="busy">Procesando…</StatusPill>}
-                {bergamotActive && (
-                  <StatusPill variant="count">
-                    {signWriting.length} SignWriting
-                  </StatusPill>
+                {hasPose3d && (
+                  <StatusPill variant="count">Animación 3D</StatusPill>
                 )}
-                {hasAvatarSigns && (
+                {signs.length > 0 && !hasPose3d && (
                   <StatusPill variant="count">
                     {signs.length} {signs.length === 1 ? 'seña' : 'señas'}
                   </StatusPill>
@@ -298,7 +320,7 @@ export default function TranslationScreen({
                   title="Secuencia de señas"
                   emptyIcon="🤟"
                   empty="Las señas saldrán aquí en orden."
-                  hasContent={signs.length > 0 || signWriting.length > 0}
+                  hasContent={signs.length > 0}
                 >
                   <SignChips signs={displaySigns} activeIndex={activeIndex} />
                 </OutputCard>
@@ -325,9 +347,9 @@ export default function TranslationScreen({
                       <p className="mt-1 text-xl font-extrabold text-pastel-ink sm:text-2xl">
                         {activeSign ? (
                           formatSign(activeSign)
-                        ) : bergamotActive ? (
-                          `Señas ${SIGNED_LANG_LABEL}`
-                        ) : hasAvatarSigns ? (
+                        ) : hasPose3d ? (
+                          `Señas ${SIGNED_LANG_LABEL} (3D)`
+                        ) : signs.length > 0 ? (
                           'Interpretando…'
                         ) : (
                           'El avatar te espera'
@@ -336,10 +358,16 @@ export default function TranslationScreen({
                     </div>
                   </div>
 
+                  {poseError && (
+                    <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+                      {poseError}
+                    </p>
+                  )}
+
                   <div className="relative flex flex-1 items-center justify-center rounded-[1.5rem] border-2 border-white/60 bg-[#FAF6EC]/90 p-4 shadow-inner sm:p-6 min-h-[320px]">
                     <div className="w-full max-w-lg">
-                      {bergamotActive ? (
-                        <SignWritingViewer tokens={signWriting} className="signwriting-panel" />
+                      {hasPose3d ? (
+                        <PoseViewer src={poseSrc} onError={handlePoseError} />
                       ) : (
                         <AvatarPlayer
                           ref={avatarRef}
@@ -352,7 +380,7 @@ export default function TranslationScreen({
                     </div>
                   </div>
 
-                  {!signs.length && !signWriting.length && !originalText && (
+                  {!signs.length && !poseSrc && !originalText && (
                     <div className="relative mt-4 rounded-2xl border-2 border-dashed border-pastel-ink/15 bg-white/50 px-4 py-3 text-center">
                       <p className="text-sm font-bold text-pastel-ink">
                         ↑ Escribe arriba o elige un ejemplo para empezar
@@ -399,50 +427,38 @@ function StatusPill({ variant, children }) {
 
 function OutputCard({ color, icon, title, empty, emptyIcon, hasContent, children }) {
   const border = color === 'green'
-    ? 'border-pastel-green-line bg-white'
-    : 'border-pastel-ink/10 bg-white'
+    ? 'border-pastel-green-line'
+    : 'border-pastel-ink/10'
+  const bg = color === 'green' ? 'bg-pastel-green/40' : 'bg-white'
 
   return (
-    <div className={'motion-surface rounded-[1.5rem] border-2 p-4 shadow-[0_14px_30px_-24px_rgba(45,42,38,0.35)] sm:p-5 ' + border}>
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-pastel-ink/10 bg-pastel-cream text-pastel-ink [&>svg]:h-4 [&>svg]:w-4">
-          {icon}
-        </span>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-pastel-grape">{title}</p>
+    <div className={`rounded-[1.5rem] border-2 ${border} ${bg} p-5 shadow-sm`}>
+      <div className="mb-3 flex items-center gap-2">
+        {icon}
+        <p className="text-sm font-extrabold text-pastel-ink">{title}</p>
       </div>
-      <div className="mt-3 min-h-[2.5rem]">
-        {hasContent ? children : (
-          <div className="flex flex-col items-center rounded-xl border-2 border-dashed border-pastel-ink/10 bg-pastel-cream/50 px-4 py-5 text-center">
-            <span className="text-3xl opacity-60">{emptyIcon}</span>
-            <p className="mt-2 text-sm font-semibold text-pastel-sub">{empty}</p>
-          </div>
-        )}
-      </div>
+      {hasContent ? children : (
+        <div className="flex flex-col items-center py-6 text-center">
+          <span className="text-3xl opacity-40">{emptyIcon}</span>
+          <p className="mt-2 text-sm font-semibold text-pastel-sub">{empty}</p>
+        </div>
+      )}
     </div>
   )
 }
 
 function BackIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M19 12H5M12 19l-7-7 7-7" />
     </svg>
   )
 }
 
 function TextIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 7h16M4 12h10M4 17h14" />
-    </svg>
-  )
+  return <span className="text-lg" aria-hidden>📝</span>
 }
 
 function SignIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 5h7M9 3v2c0 4-2.5 7-5 8M5 9c0 2.5 2.5 4.5 5 5.5" />
-      <path d="M14 20l3.5-9 3.5 9M15.2 17h4.6" />
-    </svg>
-  )
+  return <span className="text-lg" aria-hidden>🤟</span>
 }

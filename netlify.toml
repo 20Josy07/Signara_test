@@ -2,7 +2,9 @@
   command = "npm run build"
   publish = "dist"
 
-# Solo SPA fallback para rutas sin archivo (no pisa /assets ni /sgnw)
+[functions]
+  directory = "netlify/functions"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -10,7 +12,7 @@
   force = false
 
 [[headers]]
-  for = "/sgnw/esm/*.js"
+  for = "/pose-viewer/esm/*.js"
   [headers.values]
     Content-Type = "application/javascript; charset=utf-8"
     Cache-Control = "public, max-age=31536000, immutable"

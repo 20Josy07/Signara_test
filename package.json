@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "vite",
     "server": "node --env-file=.env server.js",
-    "build": "node scripts/sync-sgnw.js && vite build",
-    "predev": "node scripts/sync-sgnw.js",
+    "build": "node scripts/sync-pose-viewer.js && vite build",
+    "predev": "node scripts/sync-pose-viewer.js",
     "preview": "vite preview",
     "start": "node server.js",
     "sync:models": "node scripts/sync-models.js"
@@ -23,6 +23,7 @@
     "@tensorflow/tfjs-backend-webgl": "^4.22.0",
     "express": "^5.2.1",
     "firebase": "^11.6.0",
+    "pose-viewer": "^1.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.184.0"
