@@ -9,15 +9,14 @@ if (-not (Test-Path "venv\Scripts\python.exe")) {
     py -3.11 -m venv venv
 }
 
-Write-Host "Instalando dependencias..."
+Write-Host "Instalando dependencias de entrenamiento..."
 .\venv\Scripts\python.exe -m pip install --upgrade pip
-.\venv\Scripts\pip.exe install -r requirements_api.txt pandas scikit-learn
+.\venv\Scripts\pip.exe install -r requirements_train.txt
 
 Write-Host ""
-Write-Host "Listo. Activa el entorno con:"
-Write-Host "  .\venv\Scripts\Activate.ps1"
+Write-Host "Listo. Para entrenar:"
+Write-Host "  .\train.ps1"
 Write-Host ""
-Write-Host "Luego:"
-Write-Host "  python 08_import_msl150.py --npy-dir C:\Users\josya\Desktop\MSL-150-Dataset\data\sample_npy"
+Write-Host "O activa el venv manualmente:"
+Write-Host "  .\venv\Scripts\Activate.ps1"
 Write-Host "  python 06_gnn_train.py"
-Write-Host "  uvicorn api:app --port 8080"
